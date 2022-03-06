@@ -1,4 +1,66 @@
 
+load_all_layers <- function(data){
+  
+  lapply(c(1:length(data)), function(LAYER){
+    #print(LAYER)
+    
+    l1 <- data[[LAYER]] 
+    
+    colnames(l1) <- c(1:ncol(l1))
+    rownames(l1) <- c(1:nrow(l1))
+    l1[which(l1<=cutoff1|is.na(l1))] <- 0
+    
+    l2 <- l1[, which(colSums(l1) != 0)]
+    
+    if(0 %in% dim(l2)){
+      return(NULL)
+    } 
+    if(class(l2)=="numeric"){
+      l3 <- tibble(x=as.character(which(colSums(l1) != 0)),intensity=l2, y=names(l2))
+    } else {
+      l3 <- l2[which(rowSums(l2) != 0),]%>% as_tibble(rownames=NA) %>%
+        rownames_to_column("y") %>%
+        gather(raw_x, intensity, -y) %>%
+        mutate(x=str_match(raw_x, "\\d+"))%>%
+        select(-raw_x)
+    }
+    
+    
+    if(0 %in% dim(l3)){
+      return(NULL)
+    } 
+    
+    l3  %>%
+      #l1 %>%
+      # filter(intensity>=quantile(l1$intensity, 0.9)) %>%
+      mutate(z=LAYER)  %>%
+      return()
+    
+  }) %>% 
+    compact() %>%
+    bind_rows() %>%
+    return()
+}
+
+load_soma_region <- function(data, input){
+  lapply(c(1:length(data)), function(LAYER){ 
+  data[[LAYER]][c(min(input$y):max(input$y)), c(min(input$x):max(input$x))] %>% as_tibble() %>%
+    rownames_to_column("y") %>%
+    gather(raw_x, intensity, -y) %>%
+    mutate(x=str_match(raw_x, "\\d+"),
+           z=LAYER) %>%
+    select(-raw_x) %>%
+    return()
+  
+  }) %>% 
+  bind_rows() %>%
+  return()
+  
+}
+
+
+#intensity_table <- max_intensities
+
 
 adjust_xy_raster <- function(intensity_table){
   
@@ -64,10 +126,10 @@ adjust_xy_raster <- function(intensity_table){
     filter(between(x, final$x_adj_start, final$x_adj_end),
            between(y, final$y_adj_start, final$y_adj_end)) 
   
- tab %>% summarize(xmin=min(x),
-                  xmax=max(x),
-                 ymin=min(y),
-                ymax=max(y)) %>% print()
+ # tab %>% summarize(xmin=min(x),
+ #                  xmax=max(x),
+ #                 ymin=min(y),
+ #                ymax=max(y)) %>% print()
   
   
   return(list(tab, rat))
@@ -88,6 +150,22 @@ get_minmax <- function(d){
   ) %>%
     return()
 }
+
+
+get_are_under_curve <- function(x,y){
+  
+
+  id <- order(x)
+  
+  sum(diff(x[id])*rollmean(y[id],2)) %>% return()
+  
+}
+
+
+
+
+
+
 
 
 
