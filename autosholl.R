@@ -7,70 +7,79 @@ source("/Users/Marco/git_repos/autosholl/fncts.R")
 #file <- "/Users/Marco/Dropbox/Studium/Master/Praktikum_Mueller/example_data/Tier1_2_3_apical_D.tif"
 files <- list.files("f:/data_sholl_analysis/single_soma", pattern = "*", full.names = T)
 
-file <- "f:/data_sholl_analysis/Tiffs/Apical/Deep/Tier4_5_2_apical_D.tif"
+#file <- "f:/data_sholl_analysis/Tiffs/Apical/Deep/Tier4_5_2_apical_D.tif"
+
+file <- files[1]
 
 results <- lapply(files, function(file){
   print(file)
   data <- readTIFF(file, all=T)
-  #cutoff1 <- 0.99
-  
   cube_size <- 31
-  
-  
-  #z_vec_full <- c(((cube_size-1)/2):(length(data)-(cube_size-1)/2))
-  z_vec <- seq(((cube_size+1)/2), (length(data)-(cube_size+1)/2), cube_size)
-  y_vec <- seq(((cube_size+1)/2), (nrow(data[[1]])-(cube_size+1)/2), cube_size)
-  x_vec <- seq(((cube_size+1)/2), (ncol(data[[1]])-(cube_size+1)/2), cube_size)
-  ## loop over z axis
-  n_its <- length(data)*length(y_vec)*length(x_vec)
-  n_vox_per_cube <- cube_size^3
-  
-  first_test <- lapply(z_vec, function(Z){
-    lapply(y_vec, function(Y){
-      lapply(x_vec, function(X){
-        #print(paste(X,Y,Z, collapse = ", "))
-        zsum <- lapply(c((Z-(cube_size-1)/2):(Z+(cube_size-1)/2)), function(Z2){
-         #print(Z2)
-          data[[Z2]][c((Y-(cube_size-1)/2):(Y+(cube_size-1)/2)), 
-                     c((X-(cube_size-1)/2):(X+(cube_size-1)/2))] %>% sum() %>%
-            return()
-           
-        }) %>% as.numeric() %>% sum()
-        
-        return(c(x=X, y=Y, z=Z, sum=zsum))
-        
-      }) %>% bind_rows() %>% return()
-    }) %>% bind_rows() %>% return()
-  })  %>% bind_rows()
-  
-  
-  # ggplot(first_test, aes(x,y, fill=sum))+
-  #   facet_wrap(~z)+
-  #   geom_tile()
-  
-  filtered <- first_test %>%
-    filter(sum>0.9*n_vox_per_cube, z!=16)
-  
-  
-  
-  km <- kmeans(filtered%>% select(x,y,z), centers = 1)
-  
-  return(c(img=file %>% str_split("/") %>% unlist() %>% last(),
-           wss=sqrt(km$withinss/nrow(filtered))))
 
-})
+  xy_soma <- get_somata(cube_size, data)
+  
+  r <- 100
+  
+  deg_step <- 0.05
+  res <- lapply(1:length(data), function(Z){
+    c(z=Z,
+    mn= lapply(seq(deg_step,1,deg_step)*360, function(GRAD){
+      
+      xr <-deg2rad(GRAD) %>% sin
+      yr <- sqrt(1-xr^2)
+      
+      f <- tibble(n=1:r) %>%
+        mutate(x=round(xy_soma$y+(n*xr)),
+               y=round(xy_soma$x+(n*yr))) %>%
+        rowwise() %>%
+        mutate(i=select_intensity(x,y,data[[Z]]))
+      
+      md <- abs(diff(f$i)) %>% max()
+    
+      return(md)
+        
+    }) %>% unlist() %>% mean()) %>%
+      return()
+  }) %>% bind_rows()
+    
+  
+  z_final <- res %>%
+    filter(mn>quantile(res$mn, 0.95)) %>%
+    pull(z) %>%
+    median() %>%
+    round()
+  
+  
+  
+  
+  return(tibble(img=file %>% str_split("/") %>% unlist() %>% last(),
+                z=z_final) %>%
+           bind_cols(xy_soma %>% select(-z))
+                
+           )
+
+}) %>% 
+  bind_rows()
+
+
+
+
+
+
+
+
+
+
+
 
 wss <- lapply(c(2:nrow(filtered)-1), function(i){
   
   return(c(wss=sum(kmeans(filtered , centers=i)$withinss),
            n_clust=i))
-    
   
 }) %>% bind_rows() %>%
   bind_rows(tibble(n_clust=1, wss=(nrow(filtered)-1)*sum(apply(filtered,2,var))))
 
-ggplot(wss, aes(x=n_clust, y=wss))+
-  geom_line()
 
 
 
