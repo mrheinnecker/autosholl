@@ -1,5 +1,5 @@
 
-get_somata <- function(cube_size, data){
+get_somata <- function(cube_size, r, deg_step ,data){
   
   z_vec <- seq(((cube_size+1)/2), (length(data)-(cube_size+1)/2), cube_size)
   y_vec <- seq(((cube_size+1)/2), (nrow(data[[1]])-(cube_size+1)/2), cube_size)
@@ -34,9 +34,43 @@ get_somata <- function(cube_size, data){
   
   km <- kmeans(filtered%>% select(x,y,z), centers = 1)
   
-  res <- tibble(wss=sqrt(km$withinss/nrow(filtered))) %>%
+  xy_soma <- tibble(wss=sqrt(km$withinss/nrow(filtered))) %>%
            bind_cols(km$centers)
-  return(res)
+  
+  z_raw <- lapply(1:length(data), function(Z){
+    c(z=Z,
+      mn= lapply(seq(deg_step,1,deg_step)*360, function(GRAD){
+        
+        xr <- round(cos(deg2rad(GRAD))*-1, 10)
+        
+        yr <- round(sin(deg2rad(GRAD)),10)
+        
+        f <- tibble(n=1:r) %>%
+          mutate(x=round(xy_soma$y+(n*xr)),
+                 y=round(xy_soma$x+(n*yr))) %>%
+          rowwise() %>%
+          mutate(i=select_intensity(x,y,data[[Z]]))%>%
+          filter(!is.na(i))
+        
+        md <- abs(diff(f$i)) %>% max()
+        
+        return(md)
+        
+      }) %>% unlist() %>% mean()) %>%
+      return()
+  }) %>% bind_rows()
+  
+  
+  xy_soma$z <- z_raw %>%
+    filter(mn>quantile(z_raw$mn, 0.95)) %>%
+    pull(z) %>%
+    median() %>%
+    round()
+  
+  
+  
+  
+  return(xy_soma)
 }
 
 
@@ -44,8 +78,11 @@ rad2deg <- function(rad) {(rad * 180) / (pi)}
 deg2rad <- function(deg) {(deg * pi) / (180)}
 
 select_intensity <- function(x,y,mat){
-
-  return(mat[x,y])
+  if(between(x, 1, nrow(mat))&between(y, 1, ncol(mat))){
+    return(mat[x,y])
+  } else {
+    return(NA)
+  }
 }
 
 
@@ -188,20 +225,20 @@ select_intensity <- function(x,y,mat){
 #   
 # }
 # 
-# get_minmax <- function(d){
-#   max <- which(diff(sign(diff(d$y))) < 0) + 1
-#   min <- which(diff(sign(diff(d$y))) > 0) + 1
-#   data.frame(x = d$x[max], y = d$y[max])
-#   bind_rows(
-#     tibble(x = d$x[max], 
-#            y = d$y[max],
-#            type="maximum"),
-#     tibble(x = d$x[min], 
-#            y = d$y[min],
-#            type="minimum"),
-#   ) %>%
-#     return()
-# }
+get_minmax <- function(d){
+  max <- which(diff(sign(diff(d$y))) < 0) + 1
+  min <- which(diff(sign(diff(d$y))) > 0) + 1
+  data.frame(x = d$x[max], y = d$y[max])
+  bind_rows(
+    tibble(x = d$x[max],
+           y = d$y[max],
+           type="maximum"),
+    tibble(x = d$x[min],
+           y = d$y[min],
+           type="minimum"),
+  ) %>%
+    return()
+}
 # 
 # 
 # get_are_under_curve <- function(x,y){
