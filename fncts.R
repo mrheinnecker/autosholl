@@ -86,145 +86,6 @@ select_intensity <- function(x,y,mat){
 }
 
 
-
-# 
-# load_all_layers <- function(data){
-#   
-#   lapply(c(1:length(data)), function(LAYER){
-#     #print(LAYER)
-#     
-#     l1 <- data[[LAYER]] 
-#     
-#     colnames(l1) <- c(1:ncol(l1))
-#     rownames(l1) <- c(1:nrow(l1))
-#     l1[which(l1<=cutoff1|is.na(l1))] <- 0
-#     
-#     l2 <- l1[, which(colSums(l1) != 0)]
-#     
-#     if(0 %in% dim(l2)){
-#       return(NULL)
-#     } 
-#     if(class(l2)=="numeric"){
-#       l3 <- tibble(x=as.character(which(colSums(l1) != 0)),intensity=l2, y=names(l2))
-#     } else {
-#       l3 <- l2[which(rowSums(l2) != 0),]%>% as_tibble(rownames=NA) %>%
-#         rownames_to_column("y") %>%
-#         gather(raw_x, intensity, -y) %>%
-#         mutate(x=str_match(raw_x, "\\d+"))%>%
-#         select(-raw_x)
-#     }
-#     
-#     
-#     if(0 %in% dim(l3)){
-#       return(NULL)
-#     } 
-#     
-#     l3  %>%
-#       #l1 %>%
-#       # filter(intensity>=quantile(l1$intensity, 0.9)) %>%
-#       mutate(z=LAYER)  %>%
-#       return()
-#     
-#   }) %>% 
-#     compact() %>%
-#     bind_rows() %>%
-#     return()
-# }
-
-# load_soma_region <- function(data, input){
-#   lapply(c(1:length(data)), function(LAYER){ 
-#   data[[LAYER]][c(min(input$y):max(input$y)), c(min(input$x):max(input$x))] %>% as_tibble() %>%
-#     rownames_to_column("y") %>%
-#     gather(raw_x, intensity, -y) %>%
-#     mutate(x=str_match(raw_x, "\\d+"),
-#            z=LAYER) %>%
-#     select(-raw_x) %>%
-#     return()
-#   
-#   }) %>% 
-#   bind_rows() %>%
-#   return()
-#   
-# }
-
-
-#intensity_table <- max_intensities
-
-# 
-# adjust_xy_raster <- function(intensity_table){
-#   
-#   
-#   n_groups <- 9
-#   factor <- n_groups^(1/2)
-#   x_range <- ceiling((max(intensity_table$x)-min(intensity_table$x))/factor)
-#   y_range <- ceiling((max(intensity_table$y)-min(intensity_table$y))/factor)
-#   
-#   
-#   grouped_data <- intensity_table %>%
-#     mutate(x_group=1+ceiling((x-min(intensity_table$x))/(x_range)),
-#            y_group=1+ceiling((y-min(intensity_table$y))/(y_range)))
-# 
-#     # mutate(x_group=ceiling((x)/(x_range)),
-#     #        y_group=ceiling((y)/(y_range)))
-# 
-#   
-# #  print(max(grouped_data$x_group))
-# #  print(max(grouped_data$y_group))
-#   test_groups <- grouped_data %>%
-#     group_by(x_group, y_group) %>%
-#     summarize(x_start=min(x),
-#               x_end=max(x),
-#               y_start=min(y),
-#               y_end=max(y),
-#               n=length(intensity))
-#   
-#   
-#   x_groups <- test_groups %>%
-#     group_by(x_group) %>%
-#     summarize(mn=min(x_start),
-#               mx=max(x_end)) %>%
-#     mutate(x_length=mx-mn) %>%
-#     select(-mn, -mx)
-#   
-#   y_groups <- test_groups %>%
-#     group_by(y_group) %>%
-#     summarize(mn=min(y_start),
-#               mx=max(y_end)) %>%
-#     mutate(y_length=mx-mn) %>%
-#     select(-mn, -mx)
-#   
-#  # print(x_groups)
-# #  print(y_groups)
-#   
-#   final <- test_groups %>%
-#     left_join(x_groups, by="x_group") %>%
-#     left_join(y_groups, by="y_group") %>%
-#     mutate(max_vox=length(data)*(x_length+1)*(y_length+1),
-#            det_ratio=n/max_vox) %>%
-#     filter(det_ratio==max(.$det_ratio)) %>%
-#     mutate(x_adj_start=x_start-0.5*x_length,
-#            y_adj_start=y_start-0.5*y_length,
-#            x_adj_end=x_end+0.5*x_length,
-#            y_adj_end=y_end+0.5*y_length) 
-#     
-#     
-#   rat <- round(final$det_ratio,2)
-#   # grouped_data %>%
-#   #   filter()
-#   tab <- intensity_table %>%
-#     filter(between(x, final$x_adj_start, final$x_adj_end),
-#            between(y, final$y_adj_start, final$y_adj_end)) 
-#   
-#  # tab %>% summarize(xmin=min(x),
-#  #                  xmax=max(x),
-#  #                 ymin=min(y),
-#  #                ymax=max(y)) %>% print()
-#   
-#   
-#   return(list(tab, rat))
-#   
-# }
-# 
 get_minmax <- function(d){
   max <- which(diff(sign(diff(d$y))) < 0) + 1
   min <- which(diff(sign(diff(d$y))) > 0) + 1
@@ -239,18 +100,122 @@ get_minmax <- function(d){
   ) %>%
     return()
 }
-# 
-# 
-# get_are_under_curve <- function(x,y){
-#   
-# 
-#   id <- order(x)
-#   
-#   sum(diff(x[id])*rollmean(y[id],2)) %>% return()
-#   
-# }
-# 
 
+find_dendritic_start_sites <- function(SOMA){
+  
+  
+  deg_step <- 0.005
+  #GRAD <- 18
+  #SOMA <- somata[1,]
+  r <- 300
+  
+  mn = lapply(seq(deg_step,1,deg_step)*360, function(GRAD){
+    #print(GRAD)
+    
+    yr <- round(cos(deg2rad(GRAD))*-1, 10)
+    
+    xr <- round(sin(deg2rad(GRAD)),10)
+    
+    z_layer <- SOMA[["z"]]
+    
+    f <- tibble(n=1:r) %>%
+      mutate(y=ceiling(SOMA[["y"]]+(n*yr)),
+             x=ceiling(SOMA[["x"]]+(n*xr))) %>%
+      rowwise() %>%
+      mutate(i=select_intensity(y,x,full_image[[z_layer]]),
+             deg=GRAD) %>%
+      filter(!is.na(i))
+    
+    take_until <- f %>%
+      filter(i<0.75) %>%
+      pull(n) %>%
+      min()
+    
+    #l <- f %>% filter(n<take_until) %>% nrow()
+    
+    return(f%>% filter(n<take_until))
+    
+  }) %>% 
+    bind_rows()
+  
+  print("screened for dendrites")
+  
+  dens_func <- c(mn$deg-360,mn$deg, mn$deg+360) %>%
+    .[which(.>-100&.<460)] %>%
+    density(bw=5) 
+    
+  all_local_extreme <- get_minmax(dens_func)
+  
+  relevant_maxima <- all_local_extreme %>%
+    filter(between(x, 0, 360),
+           type=="maximum") 
+  
+  control_plot_density <- tibble(x=dens_func$x,
+                                 y=dens_func$y) %>%
+    ggplot(aes(x=x, y=y))+
+    geom_line()+
+    geom_segment(data=relevant_maxima, linetype=5,
+                 aes(x=x, xend=x, y=0, yend=y))+
+    geom_text(data=relevant_maxima, aes(label=round(x), x=x, y=y),
+              vjust=0, color="red")+
+    coord_cartesian(xlim=c(0,360))
+  print("maxima detected")
+  
+  rescored_maxima <- lapply(relevant_maxima$x, function(GRAD){
+    
+    yr <- round(cos(deg2rad(GRAD))*-1, 10)
+    
+    xr <- round(sin(deg2rad(GRAD)),10)
+    
+    z_layer <- SOMA[["z"]]
+    
+    f <- tibble(n=1:r) %>%
+      mutate(y=ceiling(SOMA[["y"]]+(n*yr)),
+             x=ceiling(SOMA[["x"]]+(n*xr))) %>%
+      rowwise() %>%
+      mutate(i=select_intensity(y,x,full_image[[z_layer]]),
+             deg=GRAD) %>%
+      filter(!is.na(i))
+    
+    take_until <- f %>%
+      filter(i<0.85) %>%
+      pull(n) %>%
+      min()
+    
+    l <- f %>% filter(n<take_until) %>% pull(n) %>% max()
+    
+    return(f%>% filter(n==l) %>% select(x,y) %>% mutate(maxima=GRAD))
+    
+  }) %>% 
+    bind_rows() #%>%
+    #mutate(tier_id=)
+  
+  print("dendrites adjusted")
+  
+  control_plot <- ggplot(mn, aes(x=x, y=y, fill=deg %>% factor(levels=unique(mn$deg))))+
+    geom_tile(show.legend = F)+
+    geom_tile(inherit.aes=F,
+              data=rescored_maxima, aes(x=x, y=y), fill="black", height=2, width=4)+
+    geom_text(inherit.aes=F,
+              data=rescored_maxima, aes(x=x, y=y, label=round(maxima)), color="white")
+  
+  
+  pdf(file = paste0("c:/Users/Marco/Dropbox/Studium/Master/Praktikum_Mueller/",
+                    file %>% str_split("/") %>% unlist() %>% last() %>% str_replace(".tif", ""),
+                    ".pdf"),
+      width = (0.1*abs(min(mn$x)-max(mn$x))), height=0.2*abs(min(mn$y)-max(mn$y)))
+  grid.arrange(
+  plot_grid(control_plot,
+            control_plot_density,
+            align="v",
+            ncol=1,
+            rel_heights = c(1,1))
+  )
+  dev.off()
+  
+  return(rescored_maxima)
+  
+}
 
 
 
