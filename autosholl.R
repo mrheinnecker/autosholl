@@ -2,6 +2,7 @@
 library(tiff)
 library(tidyverse)
 library(gridExtra)
+library(cowplot)
 
 
 source("/Users/Marco/git_repos/autosholl/fncts.R")
@@ -29,11 +30,29 @@ results <- lapply(files, function(file){
   
   print("soma detected")
   SOMA <- somata[1,]
+  
   apply(somata,1, function(SOMA){
     
-    main_dendrites <- find_dendritic_start_sites(SOMA)
+    main_dendrites_raw <- find_dendritic_start_sites(SOMA) 
+    main_dendrites <- main_dendrites_raw[[1]] %>%
+      mutate(z=SOMA[["z"]])
     
+    control_plot <- main_dendrites_raw[[2]]
+    
+    DENDRITE <- main_dendrites[5,]
     apply(main_dendrites, 1, function(DENDRITE){
+      
+      knot_list <- list()
+      next_pos <- c(DENDRITE[["x"]],DENDRITE[["y"]],DENDRITE[["z"]], DENDRITE[["maxima"]])
+      c <- 1
+      while(c<11){
+        print(c)
+        next_pos <- elongate_dendrite(next_pos) 
+        knot_list[[c]] <- next_pos %>% set_names(c("x","y","z", "angle"))
+        c <- c+1
+      }
+      
+      
       
       
       
@@ -48,4 +67,55 @@ results <- lapply(files, function(file){
 print(Sys.time()-start_time)
 }) #%>% 
   #bind_rows()
+
+
+
+SOMA <- somata[1,]
+DENDRITE <- main_dendrites[5,]
+
+pos <- knot_list[[1]]
+
+
+source("/Users/Marco/git_repos/autosholl/fncts.R")
+knot_list <- list()
+next_pos <- c(x=DENDRITE[["x"]],y=DENDRITE[["y"]],z=DENDRITE[["z"]], h_angle=DENDRITE[["maxima"]], v_angle=0)
+knot_list[[1]] <- next_pos
+c <- 1
+while(c<21){
+  print(c)
+  st <- Sys.time()
+  next_pos <- elongate_dendrite(next_pos, 10, 60)
+  c <- c+1 
+  knot_list[[c]] <- next_pos %>% set_names(c("x","y","z", "h_angle", "v_angle"))
+  print(Sys.time()-st)
+}
+
+
+
+
+control_data <- bind_rows(knot_list) %>% 
+                         rownames_to_column("n")
+
+p <- control_plot+geom_tile(inherit.aes=F, data=control_data, 
+                            aes(x=x, y=y),fill="red")+
+  geom_text(inherit.aes=F, data=bind_rows(knot_list) %>% 
+              rownames_to_column("n"), aes(x=x, y=y, label=n))
+
+
+
+
+pdf(file = paste0("c:/Users/Marco/Dropbox/Studium/Master/Praktikum_Mueller/",
+                  file %>% str_split("/") %>% unlist() %>% last() %>% str_replace(".tif", "_dendrite_elongation.pdf"),
+                  ".pdf"),
+    width = 40, height=8)
+grid.arrange(
+  p
+)
+dev.off()
+
+
+
+
+
+
 
