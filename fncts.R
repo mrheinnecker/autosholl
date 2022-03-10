@@ -15,6 +15,27 @@
 #     return()
 #   
 # }
+
+select_intensity <- function(x,y,z,full_image){
+  #print(between(z, 1, length(full_image)))
+  
+  if(between(min(x), 1, ncol(full_image[[1]]))&between(max(x), 1, ncol(full_image[[1]]))&
+     between(min(y), 1, nrow(full_image[[1]]))&between(max(y), 1, nrow(full_image[[1]]))&
+     between(min(z), 1, length(full_image))&between(max(z), 1, length(full_image))){
+    #print(1)
+    
+    # if(between(x, 1, ncol(full_image[[1]]))&
+    #    between(y, 1, nrow(full_image[[1]]))&
+    #    between(z, 1, length(full_image))){  
+    
+   # return(full_image[[z]][y,x])
+    return(lapply(z, function(Z){return(full_image[[Z]][y,x])}) %>% unlist() %>% median())
+  } else {
+    return(NA)
+  }
+}
+
+
 elongate_3d_sphere <- function(GRAD, zGRAD, x_start, y_start, z_start, r){
 
   zr <- round(cos(deg2rad(zGRAD)), 10)
@@ -42,10 +63,8 @@ elongate_3d_sphere <- function(GRAD, zGRAD, x_start, y_start, z_start, r){
 
 elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cutoff){
   
-  steps <- 10
-  
-  steps_to_skip <- 12
-  
+
+  ## trigonometry
   zr <- round(cos(deg2rad(zGRAD)), 10)
   
   zo <- round(sin(deg2rad(zGRAD)),10)
@@ -54,31 +73,35 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
   
   xr <- round(cos(deg2rad(GRAD)),10)
   
-  # tibble(n=1:r) %>%
-  #   mutate(y=ceiling(y_start+(n*yr*zr)),
-  #          x=ceiling(x_start+(n*xr*zr)),
-  #          z=ceiling(z_start+(n*zo))) %>%
-  #   rowwise() %>%
-  #   mutate(i=select_intensity(y,x,z,full_image),
-  #          deg=GRAD) %>%
-  #   filter(!is.na(i)) %>%
-  #   return()
+  ## sorrounding voxels 
+  xs <- seq(-2,2,1)
+  ys <- xs
+  zs <- c(-1,0,1)
+  
+  ## cutoffs and pre assignments
+  
+  steps <- 10
+  
+  steps_to_skip <- 12
+  
   n <- steps
-  i <- select_intensity(x_start,
-                        y_start,
-                        z_start,
-                        full_image)
+  i <- 1
   
-  xp <- x_start
-  yp <- y_start
-  zp <- z_start
-  int_list <- lapply(1:12, list)
-  co <- length(int_list)+1
-  res_list <- list()
+
+  int_list <- list(i,i,i,i,i)
+  #co <- length(int_list)+1
+  co <- 1
+  l <- co
+  res_list <- list(c(x_start, y_start, z_start))
   
-  while(median(unlist(int_list[c((co-12):co)]), na.rm=T)>cutoff&
-        median(c(i,unlist(int_list)), na.rm=T)>cutoff&
-        !is.na(i)){
+
+    
+  while(!is.na(i)&
+        (int_list[[co]]>cutoff|co>2)&
+        (co<4|mean(unlist(int_list[(length(int_list)-4):length(int_list)]))>cutoff)
+         ) { 
+    #print(co)
+    co <- co+1
     # print(round(c(x,
     #         y,
     #         z,
@@ -90,120 +113,118 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
     x <- ceiling(x_start+(n*xr*zr))
     y <- ceiling(y_start+(n*yr*zr))
     z <- ceiling(z_start+(n*zo))
-    i=select_intensity(x+seq(-2,2,1),
-                       y+seq(-2,2,1),
-                       z+seq(-1,1,1),
+    i=select_intensity(x+xs,
+                       y+ys,
+                       z+zs,
                        full_image)
-    xp=x
-    yp=y
-    zp=z
     int_list[[co]] <- i
-    res_list[[co]] <- c(x,y,z)
+    res_list[[co]] <- c(x,y,z,i=i)
     n <- n+steps
-    co <- co+1
+    l <- ifelse(i>cutoff,co,l)
   }
   
-  if(co-steps_to_skip-1<=steps_to_skip){
-    crds <- c(res_list[[steps_to_skip+1]], GRAD)
+  if(co<=2){
+    #crds <- c(res_list[[1]][1:3], GRAD)
+    return(NULL)
+    
   } else {
-    crds <- c(res_list[[co-steps_to_skip-1]], GRAD)
+    return(list(dens=tibble(n=c(1:n), deg=GRAD),
+              coords=c(res_list[[l]][1:3], GRAD)))
+    
+    #crds <-  c(res_list[[l]][1:3], GRAD)
   }
   
-  return(list(dens=tibble(n=c(1:n), deg=GRAD),
-              coords=crds))
+  
   
 }
 
 
 
 
-get_somata <- function(cube_size, r, deg_step ,data){
+
+
+
+
+elongate_dendrite <- function(pos, n_vc, n_hc){
+  cutoff <- 0.5
+  horizontal_detection_angle <- 60 
+  vertical_detection_angle <- 12
   
-  z_vec <- seq(((cube_size+1)/2), (length(data)-(cube_size+1)/2), cube_size)
-  y_vec <- seq(((cube_size+1)/2), (nrow(data[[1]])-(cube_size+1)/2), cube_size)
-  x_vec <- seq(((cube_size+1)/2), (ncol(data[[1]])-(cube_size+1)/2), cube_size)
-  ## loop over z axis
-  n_its <- length(data)*length(y_vec)*length(x_vec)
-  n_vox_per_cube <- cube_size^3
+  horizontal_angle_input <- pos[4]
+  vertical_angle_input <- pos[5]
   
-  first_test <- lapply(z_vec, function(Z){
-    lapply(y_vec, function(Y){
-      lapply(x_vec, function(X){
-        zsum <- lapply(c((Z-(cube_size-1)/2):(Z+(cube_size-1)/2)), function(Z2){
-          data[[Z2]][c((Y-(cube_size-1)/2):(Y+(cube_size-1)/2)), 
-                     c((X-(cube_size-1)/2):(X+(cube_size-1)/2))] %>% 
-            sum() %>%
-            return()
-        }) %>% 
-          as.numeric() %>% 
-          sum()
-        return(c(x=X, y=Y, z=Z, sum=zsum))
-      }) %>% 
-        bind_rows() %>% 
-        return()
-    }) %>% 
-      bind_rows() %>% 
+  print(pos)
+
+  x_start <- pos[1]
+  y_start <- pos[2]
+  z_start <- pos[3]  
+  horizontal_screening_range <- seq(horizontal_angle_input-0.5*horizontal_detection_angle,
+                 horizontal_angle_input+0.5*horizontal_detection_angle,
+                 horizontal_detection_angle/n_hc)
+  
+  vertical_screening_range <- seq(vertical_angle_input-0.5*vertical_detection_angle,
+                                  vertical_angle_input+0.5*vertical_detection_angle,
+                                  vertical_detection_angle/n_vc)
+  
+  ft <- lapply(vertical_screening_range, function(zGRAD){
+    #print(zGRAD)
+    full_screen <- lapply(horizontal_screening_range, function(GRAD){
+      #print(GRAD)
+      f <- elongate_3d_sphere_unlim(GRAD, zGRAD, x_start, y_start, z_start, cutoff)  
+      
+      return(f[["dens"]])
+      
+    }) %>% compact() %>% bind_rows() %>% #unlist() %>% tibble(n=.) %>%
+      mutate(zdeg=zGRAD) %>% 
       return()
+    
   }) %>% 
     bind_rows()
-  
-  filtered <- first_test %>%
-    filter(sum>0.9*n_vox_per_cube, z!=16)
-  
-  km <- kmeans(filtered%>% select(x,y,z), centers = 1)
-  
-  xy_soma <- tibble(wss=sqrt(km$withinss/nrow(filtered))) %>%
-           bind_cols(km$centers)
-  
-  z_raw <- lapply(1:length(data), function(Z){
-    c(z=Z,
-      mn= lapply(seq(deg_step,1,deg_step)*360, function(GRAD){
-        
-        f <- elongate_3d_sphere(GRAD, 0, xy_soma$x, xy_soma$y ,Z, 100)
-        
-        md <- abs(diff(f$i)) %>% max()
-        
-        return(md)
-        
-      }) %>% unlist() %>% mean()) %>%
-      return()
-  }) %>% bind_rows()
-  
-  
-  xy_soma$z <- z_raw %>%
-    filter(mn>quantile(z_raw$mn, 0.95)) %>%
-    pull(z) %>%
-    median() %>%
-    round()
-  
-  
-  
-  
-  return(xy_soma)
-}
 
-
-rad2deg <- function(rad) {(rad * 180) / (pi)}
-deg2rad <- function(deg) {(deg * pi) / (180)}
-
-select_intensity <- function(x,y,z,full_image){
-  #print(between(z, 1, length(full_image)))
-  
-  if(between(min(x), 1, ncol(full_image[[1]]))&between(max(x), 1, ncol(full_image[[1]]))&
-     between(min(y), 1, nrow(full_image[[1]]))&between(max(y), 1, nrow(full_image[[1]]))&
-     between(min(z), 1, length(full_image))&between(max(z), 1, length(full_image))){
-    #print(1)
-    
-    # if(between(x, 1, ncol(full_image[[1]]))&
-    #    between(y, 1, nrow(full_image[[1]]))&
-    #    between(z, 1, length(full_image))){  
-    
-   # return(full_image[[z]][y,x])
-    return(lapply(z, function(Z){return(full_image[[Z]][y,x])}) %>% unlist() %>% median())
-  } else {
-    return(NA)
+  if(nrow(ft)==0){
+    return(pos)
   }
+  
+  dens_func <- c(ft$deg) %>%
+    density(bw=5) 
+  
+  ### check densitxy func
+ # ft %>% group_by(deg, zdeg) %>% tally() %>% View
+  # ggplot(tibble(x=dens_func$x, y=dens_func$y),
+  #      aes(x=as.numeric(x), y=as.numeric(y)))+
+  # geom_line()
+  ###
+  
+  all_local_extreme <- get_minmax(dens_func)
+  
+  most_likely_elongation <- all_local_extreme %>%
+    filter(y==max(all_local_extreme$y)) %>%
+    pull(x) %>% mean()
+  
+  
+  adjust_z <- ft %>%
+    mutate(diff=abs(deg-most_likely_elongation)) %>%
+    filter(diff==min(.$diff))%>%
+    pull(zdeg) %>%
+    density(bw=3)
+  
+  vertical_angle <- get_minmax(adjust_z) %>%
+    filter(y==max(.$y)) %>% pull(x) %>% mean()
+  
+ # ggplot(tibble(x=adjust_z$x, y=adjust_z$y), aes(x,y))+
+  #  geom_line()
+  f <- elongate_3d_sphere_unlim(most_likely_elongation, 
+                                vertical_angle, 
+                                x_start, 
+                                y_start, 
+                                z_start, 
+                                cutoff) 
+  fin <- f[["coords"]]
+
+  return(c(fin, vertical_angle))
+  
 }
+
 
 
 get_minmax <- function(d){
@@ -325,126 +346,72 @@ find_dendritic_start_sites <- function(SOMA){
 }
 
 
-
-elongate_dendrite <- function(pos, n_vc, n_hc){
-  cutoff <- 0.5
-  horizontal_detection_angle <- 60 
-  vertical_detection_angle <- 12
+get_somata <- function(cube_size, r, deg_step ,data){
   
-  horizontal_angle_input <- pos[4]
-  vertical_angle_input <- pos[5]
+  z_vec <- seq(((cube_size+1)/2), (length(data)-(cube_size+1)/2), cube_size)
+  y_vec <- seq(((cube_size+1)/2), (nrow(data[[1]])-(cube_size+1)/2), cube_size)
+  x_vec <- seq(((cube_size+1)/2), (ncol(data[[1]])-(cube_size+1)/2), cube_size)
+  ## loop over z axis
+  n_its <- length(data)*length(y_vec)*length(x_vec)
+  n_vox_per_cube <- cube_size^3
   
-  print(pos)
-  # print(paste("horizontal detection range:", 
-  #             round(horizontal_angle_input-0.5*horizontal_detection_angle, 2), 
-  #             "to", 
-  #             round(horizontal_angle_input+0.5*horizontal_detection_angle, 2)))
-  # dist_from_soma_center <- 
-  #   sqrt(abs(DENDRITE[["x"]]-SOMA[["x"]])^2+
-  #          abs(DENDRITE[["y"]]-SOMA[["y"]])^2)
-
-  x_start <- pos[1]
-  y_start <- pos[2]
-  z_start <- pos[3]  
-  horizontal_screening_range <- seq(horizontal_angle_input-0.5*horizontal_detection_angle,
-                 horizontal_angle_input+0.5*horizontal_detection_angle,
-                 horizontal_detection_angle/n_hc)
-  
-  vertical_screening_range <- seq(vertical_angle_input-0.5*vertical_detection_angle,
-                                  vertical_angle_input+0.5*vertical_detection_angle,
-                                  vertical_detection_angle/n_vc)
-  
-  ft <- lapply(vertical_screening_range, function(zGRAD){
-    #print(zGRAD)
-    full_screen <- lapply(horizontal_screening_range, function(GRAD){
-      #print(GRAD)
-      f <- elongate_3d_sphere_unlim(GRAD, zGRAD, x_start, y_start, z_start, cutoff)  
-      
-      return(f[["dens"]])
-      
-    }) %>% bind_rows() %>% #unlist() %>% tibble(n=.) %>%
-      mutate(zdeg=zGRAD) %>% 
+  first_test <- lapply(z_vec, function(Z){
+    lapply(y_vec, function(Y){
+      lapply(x_vec, function(X){
+        zsum <- lapply(c((Z-(cube_size-1)/2):(Z+(cube_size-1)/2)), function(Z2){
+          data[[Z2]][c((Y-(cube_size-1)/2):(Y+(cube_size-1)/2)), 
+                     c((X-(cube_size-1)/2):(X+(cube_size-1)/2))] %>% 
+            sum() %>%
+            return()
+        }) %>% 
+          as.numeric() %>% 
+          sum()
+        return(c(x=X, y=Y, z=Z, sum=zsum))
+      }) %>% 
+        bind_rows() %>% 
+        return()
+    }) %>% 
+      bind_rows() %>% 
       return()
-    
   }) %>% 
     bind_rows()
- # print(nrow(ft))
-  # control_3d_density <- lapply(unique(ft$zdeg), function(zGRAD){
-  # 
-  #   dens_func <- ft  %>% filter(zdeg==zGRAD) %>% pull(n) %>%
-  #     density(bw=5)
-  # 
-  #   return(tibble(x=dens_func$x, y=dens_func$y, vd=zGRAD))
-  # 
-  # }) %>% bind_rows() %>%   ggplot(aes(x=as.numeric(x),
-  #                                     y=as.numeric(y),
-  #                                     color=as.character(vd)))+
-  #   geom_line()
-
-  dens_func <- c(ft$deg) %>%
-    density(bw=5) 
   
-  ### check densitxy func
-  # ggplot(tibble(x=dens_func$x, y=dens_func$y),
-  #      aes(x=as.numeric(x), y=as.numeric(y)))+
-  # geom_line()
-  ###
+  filtered <- first_test %>%
+    filter(sum>0.9*n_vox_per_cube, z!=16)
   
-  all_local_extreme <- get_minmax(dens_func)
+  km <- kmeans(filtered%>% select(x,y,z), centers = 1)
   
-  most_likely_elongation <- all_local_extreme %>%
-    filter(y==max(all_local_extreme$y)) %>%
-    pull(x) %>% mean()
+  xy_soma <- tibble(wss=sqrt(km$withinss/nrow(filtered))) %>%
+           bind_cols(km$centers)
+  
+  z_raw <- lapply(1:length(data), function(Z){
+    c(z=Z,
+      mn= lapply(seq(deg_step,1,deg_step)*360, function(GRAD){
+        
+        f <- elongate_3d_sphere(GRAD, 0, xy_soma$x, xy_soma$y ,Z, 100)
+        
+        md <- abs(diff(f$i)) %>% max()
+        
+        return(md)
+        
+      }) %>% unlist() %>% mean()) %>%
+      return()
+  }) %>% bind_rows()
   
   
-  adjust_z <- ft %>%
-    mutate(diff=abs(deg-most_likely_elongation)) %>%
-    filter(diff==min(.$diff))%>%
-    pull(zdeg) %>%
-    density(bw=3)
+  xy_soma$z <- z_raw %>%
+    filter(mn>quantile(z_raw$mn, 0.95)) %>%
+    pull(z) %>%
+    median() %>%
+    round()
   
-  vertical_angle <- get_minmax(adjust_z) %>%
-    filter(y==max(.$y)) %>% pull(x) %>% mean()
   
- # ggplot(tibble(x=adjust_z$x, y=adjust_z$y), aes(x,y))+
-  #  geom_line()
-  f <- elongate_3d_sphere_unlim(most_likely_elongation, 
-                                vertical_angle, 
-                                x_start, 
-                                y_start, 
-                                z_start, 
-                                cutoff) 
-  #f <- elongate_3d_sphere(most_likely_elongation$x, 
-   #                       vertical_angle, 
-    #                      x_start, y_start, z_start,150) 
-  fin <- f[["coords"]]
-  # take_until <- f %>%
-  #   filter(i<0.55) %>%
-  #   pull(n) %>%
-  #   min()
-  # 
-  # fin <- f%>% filter(n<take_until) %>%
-  #   filter(n==max(.$n)-4) 
-  # print(median(summed_raw$zdeg))
-  # print(nrow(summed_raw))
-  #print(summed_raw)
-  # summed <- summed_raw[ceiling(nrow(summed_raw)/2),]
-  # #print(nrow(summed))
-  # #print(summed$zdeg)
-  # 
-  # fin <- ft %>% filter(zdeg==summed$zdeg, deg==summed$deg, n==summed$n) 
-  # print(fin)
-  # if(pos[2]==fin$y){
-  #   new_angle <- pos[4]
-  # } else {
-  #   new_angle <- pos[4]-tan((pos[1]-fin$x)/(pos[2]-fin$y))
-  # }
   
-  #new_angle <- fin$deg
-  return(c(fin, vertical_angle))
   
+  return(xy_soma)
 }
 
 
-
+rad2deg <- function(rad) {(rad * 180) / (pi)}
+deg2rad <- function(deg) {(deg * pi) / (180)}
 

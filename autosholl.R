@@ -73,18 +73,20 @@ print(Sys.time()-start_time)
 SOMA <- somata[1,]
 DENDRITE <- main_dendrites[5,]
 
-pos <- knot_list[[1]]
-
+pos <- knot_list[[2]]
+n_vc <- 10
+n_hc <- 60
 
 source("/Users/Marco/git_repos/autosholl/fncts.R")
 knot_list <- list()
 next_pos <- c(x=DENDRITE[["x"]],y=DENDRITE[["y"]],z=DENDRITE[["z"]], h_angle=DENDRITE[["maxima"]], v_angle=0)
 knot_list[[1]] <- next_pos
-c <- 1
-while(c<21){
-  print(c)
+knot_list[[2]] <- next_pos
+c <- 2
+while(c<3|sum(knot_list[[c-1]][1:3]==knot_list[[c]][1:3])!=3){
+  print(c-1)
   st <- Sys.time()
-  next_pos <- elongate_dendrite(next_pos, 10, 60)
+  next_pos <- elongate_dendrite(next_pos, n_vc, n_hc)
   c <- c+1 
   knot_list[[c]] <- next_pos %>% set_names(c("x","y","z", "h_angle", "v_angle"))
   print(Sys.time()-st)
