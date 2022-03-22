@@ -61,7 +61,14 @@ elongate_3d_sphere <- function(GRAD, zGRAD, x_start, y_start, z_start, r){
 #GRAD <- most_likely_elongation 
 #zGRAD <- vertical_angle
 
-elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cutoff){
+elongate_3d_sphere_unlim <- function(GRAD, 
+                                     zGRAD, 
+                                     x_start, 
+                                     y_start, 
+                                     z_start, 
+                                     intensity_cutoff,
+                                     steps
+                                     ){
   
 
   ## trigonometry
@@ -78,9 +85,9 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
   ys <- xs
   zs <- c(-1,0,1)
   
-  ## cutoffs and pre assignments
+  ## intensity_cutoffs and pre assignments
   
-  steps <- 10
+  #steps <- 10
   
   steps_to_skip <- 12
   
@@ -97,8 +104,8 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
 
     
   while(!is.na(i)&
-        (int_list[[co]]>cutoff|co>2)&
-        (co<4|mean(unlist(int_list[(length(int_list)-4):length(int_list)]))>cutoff)
+        (int_list[[co]]>intensity_cutoff|co>2)&
+        (co<4|mean(unlist(int_list[(length(int_list)-4):length(int_list)]))>intensity_cutoff)
          ) { 
     #print(co)
     co <- co+1
@@ -120,7 +127,8 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
     int_list[[co]] <- i
     res_list[[co]] <- c(x,y,z,i=i)
     n <- n+steps
-    l <- ifelse(i>cutoff,co,l)
+    #l <- ifelse(isTRUE(i>intensity_cutoff|!is.na(i)),co,l)
+    l <- ifelse(isTRUE(i>intensity_cutoff), co, l)
   }
   
   if(co<=2){
@@ -129,7 +137,10 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
     
   } else {
     return(list(dens=tibble(n=c(1:n), deg=GRAD),
-              coords=c(res_list[[l]][1:3], GRAD)))
+              coords=c(res_list[[l]][1:3], GRAD),
+              full=res_list[c(2:l)]
+           #full=1
+           ))
     
     #crds <-  c(res_list[[l]][1:3], GRAD)
   }
@@ -138,39 +149,35 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
   
 }
 
-
-
-
-
-
-
-
-elongate_dendrite <- function(pos, n_vc, n_hc){
-  cutoff <- 0.5
-  horizontal_detection_angle <- 60 
-  vertical_detection_angle <- 12
+screen_for_dendrite_elongation <- function(pos, 
+                              vertical_subdivisions, 
+                              horizontal_subdivisions,
+                              horizontal_detection_angle,
+                              vertical_detection_angle,
+                              intensity_cutoff,
+                              steps){
   
-  horizontal_angle_input <- pos[4]
-  vertical_angle_input <- pos[5]
+  horizontal_angle_input <- as.numeric(pos[4])
+  vertical_angle_input <- as.numeric(pos[5])
   
-  print(pos)
+  #print(pos)
 
   x_start <- pos[1]
   y_start <- pos[2]
   z_start <- pos[3]  
   horizontal_screening_range <- seq(horizontal_angle_input-0.5*horizontal_detection_angle,
                  horizontal_angle_input+0.5*horizontal_detection_angle,
-                 horizontal_detection_angle/n_hc)
+                 horizontal_detection_angle/horizontal_subdivisions)
   
   vertical_screening_range <- seq(vertical_angle_input-0.5*vertical_detection_angle,
                                   vertical_angle_input+0.5*vertical_detection_angle,
-                                  vertical_detection_angle/n_vc)
+                                  vertical_detection_angle/vertical_subdivisions)
   
   ft <- lapply(vertical_screening_range, function(zGRAD){
     #print(zGRAD)
     full_screen <- lapply(horizontal_screening_range, function(GRAD){
       #print(GRAD)
-      f <- elongate_3d_sphere_unlim(GRAD, zGRAD, x_start, y_start, z_start, cutoff)  
+      f <- elongate_3d_sphere_unlim(GRAD, zGRAD, x_start, y_start, z_start, intensity_cutoff, steps)  
       
       return(f[["dens"]])
       
@@ -182,7 +189,7 @@ elongate_dendrite <- function(pos, n_vc, n_hc){
     bind_rows()
 
   if(nrow(ft)==0){
-    return(pos)
+    return(list(pos, list()))
   }
   
   dens_func <- c(ft$deg) %>%
@@ -218,12 +225,55 @@ elongate_dendrite <- function(pos, n_vc, n_hc){
                                 x_start, 
                                 y_start, 
                                 z_start, 
-                                cutoff) 
+                                intensity_cutoff,
+                                steps) 
   fin <- f[["coords"]]
-
-  return(c(fin, vertical_angle))
+  return(list(c(fin, vertical_angle), f[["full"]]))
   
 }
+
+
+
+elongate_dendrite <- function(DENDRITE,
+                  horizontal_subdivisions,
+                  vertical_subdivisions,
+                  horizontal_detection_angle,
+                  vertical_detection_angle,
+                  intensity_cutoff,
+                  steps){
+
+  knot_list <- list()
+  full_vector_list <- list()
+  next_pos <- c(x=DENDRITE[["x"]],
+                y=DENDRITE[["y"]],
+                z=DENDRITE[["z"]], 
+                h_angle=DENDRITE[["maxima"]], 
+                v_angle=0)
+  knot_list[[1]] <- next_pos
+  knot_list[[2]] <- next_pos
+  c <- 2
+  while(c<3|sum(knot_list[[c-1]][1:3]==knot_list[[c]][1:3])!=3){
+    cat(paste("\n  elongation step:", c-1))
+    st <- Sys.time()
+    raw_dendrite <- screen_for_dendrite_elongation(next_pos, 
+                                                   vertical_subdivisions, 
+                                                   horizontal_subdivisions, 
+                                                   horizontal_detection_angle,
+                                                   vertical_detection_angle,
+                                                   intensity_cutoff,
+                                                   steps)
+    next_pos <- raw_dendrite[[1]]
+    #full_vector_list[[c]] <- raw_dendrite[[2]]
+    c <- c+1 
+    knot_list[[c]] <- next_pos %>% set_names(c("x","y","z", "h_angle", "v_angle"))
+    #print(Sys.time()-st)
+  }
+  return(knot_list)
+
+
+}
+
+
 
 
 
