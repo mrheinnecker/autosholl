@@ -23,6 +23,7 @@ results <- lapply(files, function(file){
   print(file)
 
   full_image <- readTIFF(file, all=T)
+  nr <- nrow(full_image[[1]])
   somata <- get_somata(soma_xy_detection_cube_radius*2+1, 
                        soma_z_detection_radius, 
                        soma_z_detection_degree_steps, 
@@ -63,6 +64,202 @@ results <- lapply(files, function(file){
       #return(list(knot_list, full_vector_list))
     })
     
+    ### now select areas for cutoff use
+    ELD <- elongated_dendrites[[4]] 
+    
+    vector_pos <- lapply(c(1:(length(ELD)-1)), function(n){
+      
+      c(
+        xs=ELD[[n]][["x"]],
+        xe=ELD[[n+1]][["x"]],
+        ys=ELD[[n]][["y"]],
+        ye=ELD[[n+1]][["y"]],
+        zs=ELD[[n]][["z"]],
+        ze=ELD[[n+1]][["z"]]
+      ) %>%
+        return()
+      
+    }) %>% bind_rows() %>% rownames_to_column("id")
+    
+    avs <- 200    
+    vectors <- lapply(1:length(ELD), function(PT){
+      if(PT==length(ELD)){return(NULL)}
+      return(c(ELD[[PT+1]][c("x", "y", "z")]-ELD[[PT]][c("x", "y", "z")],
+               h_angle=ELD[[PT+1]]["h_angle"],
+               l=sqrt(sum(abs(ELD[[PT+1]][c("x", "y")]-ELD[[PT]][c("x", "y")])^2))))
+      
+    }) %>%
+      compact()
+    xnorm_vector <- lapply(vectors, function(V){
+      return(V[c(1:3)]/abs(V["x"]))
+    })
+    ynorm_vector <-  lapply(vectors, function(V){
+      return(V[c(1:3)]/abs(V["y"]))
+    }) 
+    overall_vector <- ELD[[length(ELD)]][c("x", "y", "z")]-ELD[[1]][c("x", "y", "z")]
+    if(abs(overall_vector[1])>abs(overall_vector[2])){
+        ## horizontal dendrite oriantation
+      overall_length <- overall_vector["x"]
+      n_segments <- abs(round(overall_length/avs))
+      use_length <- round(overall_length/n_segments)
+      full_vecs <- bind_rows(vectors) %>%
+        pull(x) %>% cumsum()      
+      #left_vecs <- full_vecs
+      res_list <- list()
+      
+      ######### new
+      
+      for(n in 1:n_segments){
+        #vec <- c(((n-1)*use_length):(n*use_length))+ELD[[1]]["x"]
+        
+        start <-(n-1)*use_length+ELD[[1]]["x"]
+        end <-   n*use_length+ELD[[1]]["x"]
+        vecs <- vector_pos %>%
+          mutate(t=ifelse(xs %in% c(start:end)|xe %in% c(start:end), T, F)) %>%
+          filter(t==T) %>%
+          pull(id) 
+        if(length(vecs)==0){
+          res_list[[n]] <- as.numeric(res_list[[n-1]])
+        } else {
+          res_list[[n]] <- as.numeric(vecs)
+        }
+        
+      }
+      
+      
+      ######### old
+      # for(n in rev(1:n_segments)){
+      #   which_vecs <- which(ceiling(left_vecs/use_length)==n)
+      #   if(length(which_vecs)==0){
+      #     res_list[[n]] <- length(left_vecs)
+      #   } else {
+      #     res_list[[n]] <- c(max(which_vecs)+1, which_vecs) %>% .[which(.<=length(full_vecs))]
+      #     left_vecs <- left_vecs[-c((which_vecs[1]+1):length(full_vecs))]
+      #   }
+      # }
+      
+      final_list <- list()
+      for(n in c(1:n_segments)){
+        print(n)
+        xs <- ELD[[1]]["x"]+n*use_length-use_length+1
+        xe <- ELD[[1]]["x"]+n*use_length 
+        ys <- ifelse(n==1,
+                     as.numeric(ELD[[1]]["y"]),
+                     as.numeric(final_list[[n-1]][nrow(final_list[[n-1]]),"y"]))  
+        
+        rv <- use_length/abs(use_length)
+        
+        rel_vecs <- full_vecs[res_list[[n]]]
+        rl <- list()
+        last_end <- xs-rv
+        for(i in 1:length(rel_vecs)){
+          #print(i)
+          if(i==1){
+            start <- xs
+          } else {
+            start <- last_end+1
+          } 
+          
+          if(i==length(rel_vecs)){
+            end <- xe 
+          } else {
+            end <- ELD[[1]]["x"]+rel_vecs[i]
+          }
+          last_end <- end
+          rl[[i]] <- rep(xnorm_vector[[res_list[[n]][i]]]["y"], abs(end-start+1))
+        }
+        
+        line <- tibble(x=xs+c(1:abs(use_length)*rv)) %>%
+          mutate(fac=Reduce(function(x,y)c(x,y),rl)) %>%
+          mutate(y=ceiling(ys+cumsum(fac)))
+        
+        final_list[[n]] <- line
+        
+        med <- round(0.5*(max(line$y)+min(line$y)))
+        
+        top <- med+avs
+        
+        all_vox <- apply(line, 1, function(C){
+          
+          xn <- (C[["x"]]-1)*nr
+          yn <- 0
+          return(c((C[["y"]]):(top))+xn+yn)
+          
+        }) %>% Reduce(function(x,y)c(x,y),.)
+        
+        ########################################################################
+        comp_img <- lapply(full_image, function(LAYER){
+          
+          LAYER[all_vox] <- 1
+          return(LAYER)
+        })
+        writeTIFF(comp_img, paste0("f:/data_sholl_analysis/test/check",n,".tif"))
+        ########################################################################
+      }
+        
+        
+        
+        
+        
+        
+        
+        # lapply(c(min(line$x):max(line$x)), function(x){
+        #   print(x)
+        # })
+        
+        
+        # tl <- tibble(x=c(min(line$x):max(line$x)),
+        #              y=med+avs) %>%
+        #   left_join(line, by="x")
+        
+        
+        
+        # start_first_vec <- vectors[[min(res_list[[n]])]]
+        # 
+        # 
+        # med <- 
+        # 
+        # 
+        # tl <- tibble(x=)
+        # bl <-
+        # ll <-
+        # rl <- 
+        # 
+        # cl <-   
+          
+      
+ 
+      
+        hl <- ELD[[length(ELD)]]["x"]-ELD[[1]]["x"] 
+        
+    } else {
+        ## vertical dedrite oriantation
+      overall_length <- overall_vector["y"]    
+      vl <- ELD[[length(ELD)]]["y"]-ELD[[1]]["y"]
+    }
+    
+    
+
+    
+
+    
+    
+    
+    vector_lengths <- lapply(1:length(ELD), function(PT){
+      if(PT==length(ELD)){return(NULL)}
+      sqrt(sum(abs(ELD[[PT+1]][c("x", "y", "z")]-ELD[[PT]][c("x", "y", "z")])^2)) %>%
+        return()
+      
+    }) 
+    
+    
+    
+    
+    
+    
+    
+    
+    
     control_data_fiji <- lapply(elongated_dendrites, function(LO){
       
       LO[[1]] <- c(x=round(SOMA[["x"]]), y=round(SOMA[["y"]]))
@@ -85,6 +282,9 @@ results <- lapply(files, function(file){
   # return(somata %>%
   #          mutate(img=file %>% str_split("/") %>% unlist() %>% last())
   #          )
+  write_csv(control_data_fiji, 
+            file="f:/data_sholl_analysis/test/example_data/dendrites.csv")
+  
 print(Sys.time()-start_time)
 }) #%>% 
   #bind_rows()

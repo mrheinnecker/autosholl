@@ -268,7 +268,7 @@ elongate_dendrite <- function(DENDRITE,
     knot_list[[c]] <- next_pos %>% set_names(c("x","y","z", "h_angle", "v_angle"))
     #print(Sys.time()-st)
   }
-  return(knot_list)
+  return(knot_list[3:c-1])
 
 
 }
@@ -315,7 +315,7 @@ find_dendritic_start_sites <- function(SOMA){
   
   dens_func <- c(mn$deg-360,mn$deg, mn$deg+360) %>%
     .[which(.>-200&.<540)] %>%
-    density(bw=5) 
+    density(bw=6) 
     
   all_local_extreme <- get_minmax(dens_func)
   
