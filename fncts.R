@@ -247,7 +247,7 @@ elongate_dendrite <- function(DENDRITE,
   next_pos <- c(x=DENDRITE[["x"]],
                 y=DENDRITE[["y"]],
                 z=DENDRITE[["z"]], 
-                h_angle=DENDRITE[["maxima"]], 
+                h_angle=DENDRITE[["h_angle"]], 
                 v_angle=0)
   knot_list[[1]] <- next_pos
   knot_list[[2]] <- next_pos
@@ -313,6 +313,16 @@ find_dendritic_start_sites <- function(SOMA){
   
   print("screened for dendrites")
   
+  soma_radius <- mn %>%
+    group_by(deg) %>%
+    summarize(mx_raw=max(n)) %>%
+    mutate(mx=ifelse(mx_raw>quantile(.$mx_raw, 0.95),
+                     round(quantile(.$mx_raw, 0.95)),
+                     round(mx_raw))) %>%
+    pull(mx) %>%
+    mean() %>%
+    round()
+  
   dens_func <- c(mn$deg-360,mn$deg, mn$deg+360) %>%
     .[which(.>-200&.<540)] %>%
     density(bw=6) 
@@ -350,17 +360,17 @@ find_dendritic_start_sites <- function(SOMA){
   
   rescored_maxima <- lapply(relevant_maxima$x, function(GRAD){
     
-    f <- elongate_3d_sphere(GRAD,0, SOMA[["x"]],SOMA[["y"]], SOMA[["z"]], 300)
+    f <- elongate_3d_sphere(GRAD,0, SOMA[["x"]],SOMA[["y"]], SOMA[["z"]], soma_radius)
     
-    take_until <- f %>%
-      filter(i<0.85) %>%
-      pull(n) %>%
-      min()
-    
-    l <- f %>% filter(n<take_until) %>% pull(n) %>% max()
-    
-    return(f%>% filter(n==l) %>% select(x,y) %>% mutate(maxima=GRAD))
-    
+    # take_until <- f %>%
+    #   filter(i<0.85) %>%
+    #   pull(n) %>%
+    #   min()
+    # 
+    # l <- f %>% filter(n<take_until) %>% pull(n) %>% max()
+    # 
+    # return(f%>% filter(n==l) %>% select(x,y) %>% mutate(maxima=GRAD))
+    return(f%>% filter(n==soma_radius) %>% select(x,y) %>% mutate(h_angle=GRAD))
   }) %>% 
     bind_rows() #%>%
     #mutate(tier_id=)
@@ -375,7 +385,7 @@ find_dendritic_start_sites <- function(SOMA){
     geom_tile(inherit.aes=F,
               data=rescored_maxima, aes(x=x, y=y), fill="black", height=2, width=4)+
     geom_text(inherit.aes=F,
-              data=rescored_maxima, aes(x=x, y=y, label=round(maxima)), color="white")
+              data=rescored_maxima, aes(x=x, y=y, label=round(h_angle)), color="white")
   
   
   pdf(file = paste0("c:/Users/Marco/Dropbox/Studium/Master/Praktikum_Mueller/",
@@ -391,7 +401,7 @@ find_dendritic_start_sites <- function(SOMA){
   )
   dev.off()
   
-  return(list(rescored_maxima, control_plot))
+  return(list(rescored_maxima, control_plot, soma_radius))
   
 }
 
@@ -462,6 +472,89 @@ get_somata <- function(cube_size, r, deg_step ,data){
 }
 
 
-rad2deg <- function(rad) {(rad * 180) / (pi)}
-deg2rad <- function(deg) {(deg * pi) / (180)}
+rad2deg <- function(rad){(rad * 180) / (pi)}
+deg2rad <- function(deg){(deg * pi) / (180)}
+
+
+#sl <- segment_list
+#file_name <- "f:/data_sholl_analysis/test/spec_segs/ggg.tif"
+normalize_regions <- function(sl, full_image, file_name, soma_reg){
+  QNT <- 0.9
+  ## remove soma 
+  nosoma_image <- lapply(1:length(full_image), function(n){
+    diff <- abs(SOMA[["z"]]-n)
+    LAYER <- full_image[[n]]
+    
+    LAYER[c((soma_reg$y-diff*2):(soma_reg$yend+diff*2)), c((soma_reg$x-diff*2):(soma_reg$xend+diff*2))] <- NA
+    return(LAYER)
+    
+  })
+  
+  
+    
+  full_cutoffs <- lapply(sl, function(VOX){
+    
+    cutoff <- lapply(nosoma_image, function(LAYER){
+      
+      return(LAYER[VOX])
+      
+    }) %>%
+      Reduce(function(x,y)c(x,y),.) %>%
+      quantile(QNT, na.rm=T) %>%
+      return()
+    
+  })
+  
+  new_image <- nosoma_image
+  
+  
+  for(i in 1:length(full_cutoffs)){
+    cat(paste("\n  ", i))
+    cutoff <- full_cutoffs[[i]]
+    VOX <- sl[[i]]
+    for(l in 1:length(new_image)){
+      #print(l)
+      new_image[[l]][VOX][new_image[[l]][VOX]>=cutoff] <- 1
+      new_image[[l]][VOX][new_image[[l]][VOX]<cutoff] <- 0
+      
+      new_image[[l]] <- matrix(new_image[[l]], nrow = 1040)
+    }
+  
+  }
+  
+  writeTIFF(new_image, file_name)
+  
+}
+
+
+
+export_dendrites <- function(elongated_dendrites, file_name){
+  
+  control_data_fiji <- lapply(elongated_dendrites, function(LO){
+    
+    LO[[1]] <- c(x=round(SOMA[["x"]]), y=round(SOMA[["y"]]))
+    
+    raw <- LO %>%
+      bind_rows %>% select(x,y) %>%
+      rownames_to_column("counter") %>%
+      mutate(counter=as.numeric(counter)) %>%
+      arrange(counter)
+    
+    raw_desc <- raw %>%
+      arrange(desc(counter))
+    
+    return(bind_rows(raw, raw_desc) %>% select(-counter)
+    )
+    
+  }) %>% bind_rows()
+  write_csv(control_data_fiji, 
+            file=file_name)
+  
+  
+}
+
+
+
+
+
 
