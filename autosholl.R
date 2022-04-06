@@ -23,8 +23,8 @@ results <- lapply(files, function(file){
   print(file)
 
   full_image <- readTIFF(file, all=T)
-  nr <- nrow(full_image[[1]])
-  nc <- ncol(full_image[[1]])
+  nr_orig <- nrow(full_image[[1]])
+  nc_orig <- ncol(full_image[[1]])
   somata <- get_somata(soma_xy_detection_cube_radius*2+1, 
                        soma_z_detection_radius, 
                        soma_z_detection_degree_steps, 
@@ -76,7 +76,7 @@ results <- lapply(files, function(file){
     ## check in fiji:
     export_dendrites(elongated_dendrites, "f:/data_sholl_analysis/test/example_data/dendrites.csv")
     
-    borders_vox <- lapply(1:nrow(main_dendrites), function(n){
+    borders_vox_raw <- lapply(1:nrow(main_dendrites), function(n){
       
       if(n!=nrow(main_dendrites)){
         h_angle <- 0.5*sum(main_dendrites$h_angle[n], main_dendrites$h_angle[n+1])
@@ -88,8 +88,8 @@ results <- lapply(files, function(file){
           h_angle <- raw
         }
       }
-      
-      elongate_3d_sphere(h_angle, 0, SOMA[["x"]], SOMA[["y"]], SOMA[["z"]], nc) %>%
+      print(h_angle)
+      elongate_3d_sphere(h_angle, 0, SOMA[["x"]], SOMA[["y"]], SOMA[["z"]], round(sqrt(nc_orig^2+nr_orig^2))) %>%
         select(x,y) %>%
         return()
       
@@ -104,16 +104,39 @@ results <- lapply(files, function(file){
     # }, simplify=F)
     ### now select areas for cutoff use
     
-    nELD <- 2
+    nELD <- 1
     dendrite_segments <- lapply(1:length(elongated_dendrites), function(nELD){
     #dendrite_segments <- lapply(c(2,4), function(nELD){  
       print(paste("dendrite:", nELD))
-      ELD <- elongated_dendrites[[nELD]] 
+      ELD_raw <- elongated_dendrites[[nELD]] 
       avs <- 200 
-      overall_vector <- ELD[[length(ELD)]][c("x", "y", "z")]-ELD[[1]][c("x", "y", "z")]
+      overall_vector_raw <- ELD_raw[[length(ELD_raw)]][c("x", "y", "z")]-ELD_raw[[1]][c("x", "y", "z")]
+      
+      if(abs(overall_vector_raw[1])>abs(overall_vector_raw[2])){
+        direction <- "h"
+        ELD <- ELD_raw
+        overall_vector <- overall_vector_raw
+        borders_vox <- borders_vox_raw
+        nr <- nr_orig
+        nc <- nc_orig
+      } else {
+        direction <- "v"
+        ELD <- lapply(ELD_raw, function(VEC){
+          return(c(x=VEC[["y"]], y=VEC[["x"]], z=VEC[["z"]],  h_angle=VEC[["h_angle"]],  v_angle=VEC[["v_angle"]]))
+        })
+        overall_vector <- c(x=overall_vector_raw[["y"]], y=overall_vector_raw[["x"]], 
+                            z=overall_vector_raw[["z"]])
+        borders_vox <- lapply(borders_vox_raw, function(BORD){
+          tibble(x=BORD$y, y=BORD$x) %>%
+            return()
+        })
+        nc <- nr_orig
+        nr <- nc_orig
+      }
+      
       
 
-      if(abs(overall_vector[1])>abs(overall_vector[2])){
+      #if(abs(overall_vector[1])>abs(overall_vector[2])){
 ################################################################################
 ################################################################################
 ################## horizonatl dendrite orientation #############################     
@@ -121,60 +144,91 @@ results <- lapply(files, function(file){
 ################################################################################        
         overall_length <- overall_vector["x"]
         rv <- overall_vector["x"]/abs(overall_vector["x"])
-        if(rv==1){
-################################################################################  
-################## vector direction: right #####################################          
-################################################################################    
-          pixels_to_image_border <- nc-ELD[[1]]["x"]
-          ELD[[length(ELD)+1]] <- c(x=nc, ELD[[length(ELD)]][c("y", "z")], h_angle=0, v_angle=0)
-          if(nELD==1){
-            top_border <- borders_vox[[1]]
-            bottom_border <- borders_vox[[length(borders_vox)]]
+        if(direction=="h"){
+          if(rv==1){
+  ################################################################################  
+  ################## vector direction: right #####################################          
+  ################################################################################    
+            pixels_to_image_border <- nc-ELD[[1]]["x"]
+            ELD[[length(ELD)+1]] <- c(x=nc, ELD[[length(ELD)]][c("y", "z")], h_angle=0, v_angle=0)
+            if(nELD==1){
+              top_border <- borders_vox[[1]]
+              bottom_border <- borders_vox[[length(borders_vox)]]
+            } else {
+              top_border <- borders_vox[[nELD]]
+              bottom_border <- borders_vox[[nELD-1]]  
+            }
           } else {
-            top_border <- borders_vox[[nELD]]
-            bottom_border <- borders_vox[[nELD-1]]  
+  ################################################################################  
+  ################## vector direction: left  #####################################          
+  ################################################################################          
+            pixels_to_image_border <- 1-ELD[[1]]["x"]
+            ELD[[length(ELD)+1]] <- c(x=1, ELD[[length(ELD)]][c("y", "z")], h_angle=180, v_angle=0)
+            if(nELD==1){
+              top_border <- borders_vox[[length(borders_vox)]]
+              bottom_border <- borders_vox[[1]]
+            } else {
+              top_border <- borders_vox[[nELD-1]]
+              bottom_border <- borders_vox[[nELD]]  
+            }
           }
         } else {
-################################################################################  
-################## vector direction: left  #####################################          
-################################################################################          
-          pixels_to_image_border <- 1-ELD[[1]]["x"]
-          ELD[[length(ELD)+1]] <- c(x=1, ELD[[length(ELD)]][c("y", "z")], h_angle=180, v_angle=0)
-          if(nELD==1){
-            top_border <- borders_vox[[length(borders_vox)]]
-            bottom_border <- borders_vox[[1]]
+          if(rv==1){
+            ################################################################################  
+            ################## vector direction: right #####################################          
+            ################################################################################    
+            pixels_to_image_border <- nc-ELD[[1]]["x"]
+            ELD[[length(ELD)+1]] <- c(x=nc, ELD[[length(ELD)]][c("y", "z")], h_angle=0, v_angle=0)
+            if(nELD==1){
+              top_border <- borders_vox[[length(borders_vox)]]
+              bottom_border <- borders_vox[[1]]
+            } else {
+              top_border <- borders_vox[[nELD-1]]
+              bottom_border <- borders_vox[[nELD]]  
+            }
           } else {
-            top_border <- borders_vox[[nELD-1]]
-            bottom_border <- borders_vox[[nELD]]  
+            ################################################################################  
+            ################## vector direction: left  #####################################          
+            ################################################################################          
+            pixels_to_image_border <- 1-ELD[[1]]["x"]
+            ELD[[length(ELD)+1]] <- c(x=1, ELD[[length(ELD)]][c("y", "z")], h_angle=180, v_angle=0)
+            if(nELD==1){
+              top_border <- borders_vox[[1]]
+              bottom_border <- borders_vox[[length(borders_vox)]]
+            } else {
+              top_border <- borders_vox[[nELD]]
+              bottom_border <- borders_vox[[nELD-1]]  
+            }
           }
+          
+          
         }
-      } else {
-################################################################################
-################################################################################
-################## vertical dendrite orientation ###############################        
-################################################################################ 
-################################################################################  
-        overall_length <- overall_vector["y"]
-        rv <- overall_vector["y"]/abs(overall_vector["y"])
-        if(rv==1){
-################################################################################  
-################## vector direction: top   #####################################          
-################################################################################
-          pixels_to_image_border <- nr-ELD[[1]]["y"]
-          ELD[[length(ELD)+1]] <- c(ELD[[length(ELD)]]["x"], y=nr, ELD[[length(ELD)]]["z"], h_angle=90, v_angle=0)
-        } else {
-################################################################################  
-################## vector direction: bottom ####################################          
-################################################################################
-          pixels_to_image_border <- 1-ELD[[1]]["y"]
-          ELD[[length(ELD)+1]] <- c(ELD[[length(ELD)]]["x"], y=1, ELD[[length(ELD)]]["z"], h_angle=270, v_angle=0)
-        } 
-      }                          
+# ################################################################################
+# ################################################################################
+# ################## vertical dendrite orientation ###############################        
+# ################################################################################ 
+# ################################################################################  
+#         overall_length <- overall_vector["y"]
+#         rv <- overall_vector["y"]/abs(overall_vector["y"])
+#         if(rv==1){
+# ################################################################################  
+# ################## vector direction: top   #####################################          
+# ################################################################################
+#           pixels_to_image_border <- nr-ELD[[1]]["y"]
+#           ELD[[length(ELD)+1]] <- c(ELD[[length(ELD)]]["x"], y=nr, ELD[[length(ELD)]]["z"], h_angle=90, v_angle=0)
+#         } else {
+# ################################################################################  
+# ################## vector direction: bottom ####################################          
+# ################################################################################
+#           pixels_to_image_border <- 1-ELD[[1]]["y"]
+#           ELD[[length(ELD)+1]] <- c(ELD[[length(ELD)]]["x"], y=1, ELD[[length(ELD)]]["z"], h_angle=270, v_angle=0)
+#         } 
+#       }                          
       
       vector_pos <- create_df_of_vectors(ELD)
       vectors <- create_rv_of_vectors(ELD)
       xnorm_vector <- lapply(vectors, function(V){V[c(1:3)]/abs(V["x"])})
-      ynorm_vector <-  lapply(vectors, function(V){V[c(1:3)]/abs(V["y"])}) 
+      #ynorm_vector <-  lapply(vectors, function(V){V[c(1:3)]/abs(V["y"])}) 
         
       n_segments <- abs(round(pixels_to_image_border/avs))
       use_length <- round(pixels_to_image_border/n_segments)
@@ -265,7 +319,7 @@ results <- lapply(files, function(file){
                    between(y, 1, nr))
            
           
-          all_vox_top <- lapply(top_line$x, function(X){
+          all_vox_top_raw <- lapply(top_line$x, function(X){
             #print(X)
             s <- top_line %>%
               filter(x==X) %>%
@@ -299,7 +353,7 @@ results <- lapply(files, function(file){
                    between(y, 1, nr))
           
           
-          all_vox_bottom <- lapply(bottom_line$x, function(X){
+          all_vox_bottom_raw <- lapply(bottom_line$x, function(X){
             
             s <- bottom_line %>%
               filter(x==X) %>%
@@ -313,14 +367,34 @@ results <- lapply(files, function(file){
           }) %>% Reduce(function(x,y)c(x,y),.)
           
           
+          if(direction=="h"){
+            all_vox_top <- all_vox_top_raw
+            all_vox_bottom <- all_vox_bottom_raw
+          } else {
+            all_vox_top <- lapply(all_vox_top_raw, function(I){
+              xy_index <- get_xy_index(I, nr)
+              return(get_single_index(xy_index[["y"]], xy_index[["x"]], nr_orig))
+            }) %>% Reduce(function(x,y)c(x,y),.)
+            all_vox_bottom <- lapply(all_vox_bottom_raw, function(I){
+              xy_index <- get_xy_index(I, nr)
+              return(get_single_index(xy_index[["y"]], xy_index[["x"]], nr_orig))
+            }) %>% Reduce(function(x,y)c(x,y),.)
+          }
+          
           final_list[[n]] <- med_line
           segment_list[[2*n-1]] <- all_vox_top
           segment_list[[2*n]] <- all_vox_bottom
           ########################################################################
+          # all_vox_bottom_test <- lapply(all_vox_bottom_raw, function(I){
+          #   xy_index <- get_xy_index(I, nr)
+          #   return(c(inp=I, xy_index, new=get_single_index(xy_index[["y"]], xy_index[["x"]], nr_orig)))
+          # }) %>% bind_rows()
+          # 
+          # 
           # comp_img <- lapply(full_image, function(LAYER){
-          #   
+          # 
           #   LAYER[all_vox_top] <- 1
-          #   LAYER[all_vox_bottom] <- 0.5
+          #   #LAYER[all_vox_bottom] <- 0.5
           #   return(LAYER)
           # })
           # writeTIFF(comp_img, paste0("f:/data_sholl_analysis/test/check",n,".tif"))
@@ -333,10 +407,21 @@ results <- lapply(files, function(file){
         #                   soma_reg)
     }) # dendrite
     
+    tl <- c(dendrite_segments[[1]], dendrite_segments[[2]], dendrite_segments[[3]], dendrite_segments[[4]])
+    vl <- c(dendrite_segments[[1]], dendrite_segments[[3]])
+    hl <- c(dendrite_segments[[2]], dendrite_segments[[4]])
     normalize_regions(tl, 
-                                         full_image, 
-                                         "f:/data_sholl_analysis/test/spec_segs/both.tif", 
-                                         soma_reg)
+                      full_image, 
+                      "f:/data_sholl_analysis/test/spec_segs/all.tif", 
+                       soma_reg)
+    normalize_regions(vl, 
+                      full_image, 
+                      "f:/data_sholl_analysis/test/spec_segs/vertical.tif", 
+                      soma_reg)
+    normalize_regions(hl, 
+                      full_image, 
+                      "f:/data_sholl_analysis/test/spec_segs/horizontal.tif", 
+                      soma_reg)
     fd <- Reduce(function(x,y)c(x,y),segment_list)
     
   }) # soma

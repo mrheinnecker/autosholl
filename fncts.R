@@ -493,7 +493,7 @@ normalize_regions <- function(sl, full_image, file_name, soma_reg){
   
     
   full_cutoffs <- lapply(sl, function(VOX){
-    
+    print(1)
     cutoff <- lapply(nosoma_image, function(LAYER){
       
       return(LAYER[VOX])
@@ -607,7 +607,26 @@ assign_vectors_to_segments <- function(ELD, vector_pos, use_length, n_segments){
 }
 
 
+get_single_index <- function(x,y,nr){
+  
+  nr*(x-1)+y
+  
+}
 
+get_xy_index <- function(i, nr){
+  
+  y <- i%%nr
+  if(y==0){
+    y_ret <- nr
+    x <- (i-y)/nr 
+  } else {
+    y_ret <- y
+    x <- (i-y)/nr+1
+  }
+  
+  return(c(x=x, y=y_ret))
+  
+}
 
 
 
