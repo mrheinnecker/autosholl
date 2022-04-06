@@ -61,7 +61,14 @@ elongate_3d_sphere <- function(GRAD, zGRAD, x_start, y_start, z_start, r){
 #GRAD <- most_likely_elongation 
 #zGRAD <- vertical_angle
 
-elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cutoff){
+elongate_3d_sphere_unlim <- function(GRAD, 
+                                     zGRAD, 
+                                     x_start, 
+                                     y_start, 
+                                     z_start, 
+                                     intensity_cutoff,
+                                     steps
+                                     ){
   
 
   ## trigonometry
@@ -78,9 +85,9 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
   ys <- xs
   zs <- c(-1,0,1)
   
-  ## cutoffs and pre assignments
+  ## intensity_cutoffs and pre assignments
   
-  steps <- 10
+  #steps <- 10
   
   steps_to_skip <- 12
   
@@ -97,8 +104,8 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
 
     
   while(!is.na(i)&
-        (int_list[[co]]>cutoff|co>2)&
-        (co<4|mean(unlist(int_list[(length(int_list)-4):length(int_list)]))>cutoff)
+        (int_list[[co]]>intensity_cutoff|co>2)&
+        (co<4|mean(unlist(int_list[(length(int_list)-4):length(int_list)]))>intensity_cutoff)
          ) { 
     #print(co)
     co <- co+1
@@ -120,7 +127,8 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
     int_list[[co]] <- i
     res_list[[co]] <- c(x,y,z,i=i)
     n <- n+steps
-    l <- ifelse(i>cutoff,co,l)
+    #l <- ifelse(isTRUE(i>intensity_cutoff|!is.na(i)),co,l)
+    l <- ifelse(isTRUE(i>intensity_cutoff), co, l)
   }
   
   if(co<=2){
@@ -129,7 +137,10 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
     
   } else {
     return(list(dens=tibble(n=c(1:n), deg=GRAD),
-              coords=c(res_list[[l]][1:3], GRAD)))
+              coords=c(res_list[[l]][1:3], GRAD),
+              full=res_list[c(2:l)]
+           #full=1
+           ))
     
     #crds <-  c(res_list[[l]][1:3], GRAD)
   }
@@ -138,39 +149,35 @@ elongate_3d_sphere_unlim <- function(GRAD, zGRAD, x_start, y_start, z_start, cut
   
 }
 
-
-
-
-
-
-
-
-elongate_dendrite <- function(pos, n_vc, n_hc){
-  cutoff <- 0.5
-  horizontal_detection_angle <- 60 
-  vertical_detection_angle <- 12
+screen_for_dendrite_elongation <- function(pos, 
+                              vertical_subdivisions, 
+                              horizontal_subdivisions,
+                              horizontal_detection_angle,
+                              vertical_detection_angle,
+                              intensity_cutoff,
+                              steps){
   
-  horizontal_angle_input <- pos[4]
-  vertical_angle_input <- pos[5]
+  horizontal_angle_input <- as.numeric(pos[4])
+  vertical_angle_input <- as.numeric(pos[5])
   
-  print(pos)
+  #print(pos)
 
   x_start <- pos[1]
   y_start <- pos[2]
   z_start <- pos[3]  
   horizontal_screening_range <- seq(horizontal_angle_input-0.5*horizontal_detection_angle,
                  horizontal_angle_input+0.5*horizontal_detection_angle,
-                 horizontal_detection_angle/n_hc)
+                 horizontal_detection_angle/horizontal_subdivisions)
   
   vertical_screening_range <- seq(vertical_angle_input-0.5*vertical_detection_angle,
                                   vertical_angle_input+0.5*vertical_detection_angle,
-                                  vertical_detection_angle/n_vc)
+                                  vertical_detection_angle/vertical_subdivisions)
   
   ft <- lapply(vertical_screening_range, function(zGRAD){
     #print(zGRAD)
     full_screen <- lapply(horizontal_screening_range, function(GRAD){
       #print(GRAD)
-      f <- elongate_3d_sphere_unlim(GRAD, zGRAD, x_start, y_start, z_start, cutoff)  
+      f <- elongate_3d_sphere_unlim(GRAD, zGRAD, x_start, y_start, z_start, intensity_cutoff, steps)  
       
       return(f[["dens"]])
       
@@ -182,7 +189,7 @@ elongate_dendrite <- function(pos, n_vc, n_hc){
     bind_rows()
 
   if(nrow(ft)==0){
-    return(pos)
+    return(list(pos, list()))
   }
   
   dens_func <- c(ft$deg) %>%
@@ -218,12 +225,55 @@ elongate_dendrite <- function(pos, n_vc, n_hc){
                                 x_start, 
                                 y_start, 
                                 z_start, 
-                                cutoff) 
+                                intensity_cutoff,
+                                steps) 
   fin <- f[["coords"]]
-
-  return(c(fin, vertical_angle))
+  return(list(c(fin, vertical_angle), f[["full"]]))
   
 }
+
+
+
+elongate_dendrite <- function(DENDRITE,
+                  horizontal_subdivisions,
+                  vertical_subdivisions,
+                  horizontal_detection_angle,
+                  vertical_detection_angle,
+                  intensity_cutoff,
+                  steps){
+
+  knot_list <- list()
+  full_vector_list <- list()
+  next_pos <- c(x=DENDRITE[["x"]],
+                y=DENDRITE[["y"]],
+                z=DENDRITE[["z"]], 
+                h_angle=DENDRITE[["h_angle"]], 
+                v_angle=0)
+  knot_list[[1]] <- next_pos
+  knot_list[[2]] <- next_pos
+  c <- 2
+  while(c<3|sum(knot_list[[c-1]][1:3]==knot_list[[c]][1:3])!=3){
+    cat(paste("\n  elongation step:", c-1))
+    st <- Sys.time()
+    raw_dendrite <- screen_for_dendrite_elongation(next_pos, 
+                                                   vertical_subdivisions, 
+                                                   horizontal_subdivisions, 
+                                                   horizontal_detection_angle,
+                                                   vertical_detection_angle,
+                                                   intensity_cutoff,
+                                                   steps)
+    next_pos <- raw_dendrite[[1]]
+    #full_vector_list[[c]] <- raw_dendrite[[2]]
+    c <- c+1 
+    knot_list[[c]] <- next_pos %>% set_names(c("x","y","z", "h_angle", "v_angle"))
+    #print(Sys.time()-st)
+  }
+  return(knot_list[3:c-1])
+
+
+}
+
+
 
 
 
@@ -263,9 +313,19 @@ find_dendritic_start_sites <- function(SOMA){
   
   print("screened for dendrites")
   
+  soma_radius <- mn %>%
+    group_by(deg) %>%
+    summarize(mx_raw=max(n)) %>%
+    mutate(mx=ifelse(mx_raw>quantile(.$mx_raw, 0.95),
+                     round(quantile(.$mx_raw, 0.95)),
+                     round(mx_raw))) %>%
+    pull(mx) %>%
+    mean() %>%
+    round()
+  
   dens_func <- c(mn$deg-360,mn$deg, mn$deg+360) %>%
     .[which(.>-200&.<540)] %>%
-    density(bw=5) 
+    density(bw=6) 
     
   all_local_extreme <- get_minmax(dens_func)
   
@@ -300,17 +360,17 @@ find_dendritic_start_sites <- function(SOMA){
   
   rescored_maxima <- lapply(relevant_maxima$x, function(GRAD){
     
-    f <- elongate_3d_sphere(GRAD,0, SOMA[["x"]],SOMA[["y"]], SOMA[["z"]], 300)
+    f <- elongate_3d_sphere(GRAD,0, SOMA[["x"]],SOMA[["y"]], SOMA[["z"]], soma_radius)
     
-    take_until <- f %>%
-      filter(i<0.85) %>%
-      pull(n) %>%
-      min()
-    
-    l <- f %>% filter(n<take_until) %>% pull(n) %>% max()
-    
-    return(f%>% filter(n==l) %>% select(x,y) %>% mutate(maxima=GRAD))
-    
+    # take_until <- f %>%
+    #   filter(i<0.85) %>%
+    #   pull(n) %>%
+    #   min()
+    # 
+    # l <- f %>% filter(n<take_until) %>% pull(n) %>% max()
+    # 
+    # return(f%>% filter(n==l) %>% select(x,y) %>% mutate(maxima=GRAD))
+    return(f%>% filter(n==soma_radius) %>% select(x,y) %>% mutate(h_angle=GRAD))
   }) %>% 
     bind_rows() #%>%
     #mutate(tier_id=)
@@ -325,7 +385,7 @@ find_dendritic_start_sites <- function(SOMA){
     geom_tile(inherit.aes=F,
               data=rescored_maxima, aes(x=x, y=y), fill="black", height=2, width=4)+
     geom_text(inherit.aes=F,
-              data=rescored_maxima, aes(x=x, y=y, label=round(maxima)), color="white")
+              data=rescored_maxima, aes(x=x, y=y, label=round(h_angle)), color="white")
   
   
   pdf(file = paste0("c:/Users/Marco/Dropbox/Studium/Master/Praktikum_Mueller/",
@@ -341,7 +401,7 @@ find_dendritic_start_sites <- function(SOMA){
   )
   dev.off()
   
-  return(list(rescored_maxima, control_plot))
+  return(list(rescored_maxima, control_plot, soma_radius))
   
 }
 
@@ -412,6 +472,162 @@ get_somata <- function(cube_size, r, deg_step ,data){
 }
 
 
-rad2deg <- function(rad) {(rad * 180) / (pi)}
-deg2rad <- function(deg) {(deg * pi) / (180)}
+rad2deg <- function(rad){(rad * 180) / (pi)}
+deg2rad <- function(deg){(deg * pi) / (180)}
+
+
+#sl <- segment_list
+#file_name <- "f:/data_sholl_analysis/test/spec_segs/ggg.tif"
+normalize_regions <- function(sl, full_image, file_name, soma_reg){
+  QNT <- 0.9
+  ## remove soma 
+  nosoma_image <- lapply(1:length(full_image), function(n){
+    diff <- abs(SOMA[["z"]]-n)
+    LAYER <- full_image[[n]]
+    
+    LAYER[c((soma_reg$y-diff*2):(soma_reg$yend+diff*2)), c((soma_reg$x-diff*2):(soma_reg$xend+diff*2))] <- NA
+    return(LAYER)
+    
+  })
+  
+  
+    
+  full_cutoffs <- lapply(sl, function(VOX){
+    print(1)
+    cutoff <- lapply(nosoma_image, function(LAYER){
+      
+      return(LAYER[VOX])
+      
+    }) %>%
+      Reduce(function(x,y)c(x,y),.) %>%
+      quantile(QNT, na.rm=T) %>%
+      return()
+    
+  })
+  
+  new_image <- nosoma_image
+  
+  
+  for(i in 1:length(full_cutoffs)){
+    cat(paste("\n  ", i))
+    cutoff <- full_cutoffs[[i]]
+    VOX <- sl[[i]]
+    for(l in 1:length(new_image)){
+      #print(l)
+      new_image[[l]][VOX][new_image[[l]][VOX]>=cutoff] <- 1
+      new_image[[l]][VOX][new_image[[l]][VOX]<cutoff] <- 0
+      
+      new_image[[l]] <- matrix(new_image[[l]], nrow = 1040)
+    }
+  
+  }
+  
+  writeTIFF(new_image, file_name)
+  
+}
+
+
+
+export_dendrites <- function(elongated_dendrites, file_name){
+  
+  control_data_fiji <- lapply(elongated_dendrites, function(LO){
+    
+    LO[[1]] <- c(x=round(SOMA[["x"]]), y=round(SOMA[["y"]]))
+    
+    raw <- LO %>%
+      bind_rows %>% select(x,y) %>%
+      rownames_to_column("counter") %>%
+      mutate(counter=as.numeric(counter)) %>%
+      arrange(counter)
+    
+    raw_desc <- raw %>%
+      arrange(desc(counter))
+    
+    return(bind_rows(raw, raw_desc) %>% select(-counter)
+    )
+    
+  }) %>% bind_rows()
+  write_csv(control_data_fiji, 
+            file=file_name)
+  
+  
+}
+
+
+create_df_of_vectors <- function(ELD){
+  lapply(c(1:(length(ELD)-1)), function(n){
+    
+    c(
+      xs=ELD[[n]][["x"]],
+      xe=ELD[[n+1]][["x"]],
+      ys=ELD[[n]][["y"]],
+      ye=ELD[[n+1]][["y"]],
+      zs=ELD[[n]][["z"]],
+      ze=ELD[[n+1]][["z"]]
+    ) %>%
+      return()
+    
+  }) %>% 
+    bind_rows() %>% 
+    rownames_to_column("id") %>%
+    return()
+}
+
+create_rv_of_vectors <- function(ELD){
+  lapply(1:length(ELD), function(PT){
+    if(PT==length(ELD)){return(NULL)}
+    return(c(ELD[[PT+1]][c("x", "y", "z")]-ELD[[PT]][c("x", "y", "z")],
+             h_angle=ELD[[PT+1]]["h_angle"],
+             l=sqrt(sum(abs(ELD[[PT+1]][c("x", "y")]-ELD[[PT]][c("x", "y")])^2))))
+    
+  }) %>%
+    compact() %>%
+    return()
+}
+
+assign_vectors_to_segments <- function(ELD, vector_pos, use_length, n_segments){
+  
+  res_list <- list()
+  
+  for(n in 1:n_segments){
+    start <-(n-1)*use_length+ELD[[1]]["x"]
+    end <-   n*use_length+ELD[[1]]["x"]
+    vecs <- vector_pos %>% rowwise() %>%
+      #mutate(t=ifelse(xs %in% c(start:end)|xe %in% c(start:end), T, F)) %>%
+      mutate(t=ifelse(length(intersect(start:end, xs:xe))>0, T, F)) %>%
+      filter(t==T) %>%
+      pull(id) 
+    if(length(vecs)==0){
+      res_list[[n]] <- as.numeric(res_list[[n-1]])
+    } else {
+      res_list[[n]] <- as.numeric(vecs)
+    }
+  }
+  return(res_list)
+}
+
+
+get_single_index <- function(x,y,nr){
+  
+  nr*(x-1)+y
+  
+}
+
+get_xy_index <- function(i, nr){
+  
+  y <- i%%nr
+  if(y==0){
+    y_ret <- nr
+    x <- (i-y)/nr 
+  } else {
+    y_ret <- y
+    x <- (i-y)/nr+1
+  }
+  
+  return(c(x=x, y=y_ret))
+  
+}
+
+
+
 
