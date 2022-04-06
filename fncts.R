@@ -607,6 +607,28 @@ assign_vectors_to_segments <- function(ELD, vector_pos, use_length, n_segments){
 }
 
 
+# get_single_index <- function(x,y,nr){
+#   
+#   nr*(x-1)+y
+#   
+# }
+
+# get_xy_index <- function(i, nr){
+#   y <- i%%nr
+#   if(y==0){
+#     y_ret <- nr
+#     x <- (i-y)/nr 
+#   } else {
+#     y_ret <- y
+#     x <- (i-y)/nr+1
+#   }
+#  
+#   # original nr*(x-1)+y
+#   return(c(x=x, y=y_ret))
+#   
+# }
+
+
 get_single_index <- function(x,y,nr){
   
   nr*(x-1)+y
@@ -628,6 +650,40 @@ get_xy_index <- function(i, nr){
   
 }
 
+retransform_index <- function(i, nr, nr_orig){
+  y <- i%%nr   
+  if(y==0){
+    return(nr_orig*(nr-1)+(i-y)/nr)
+  } else {
+    return(nr_orig*(y-1)+(i-y)/nr+1)
+  }
+  
+}
 
+
+
+combine_vectors <- function(ELD, xs, xe, rv, full_vecs, xnorm_vector, res_list, n){
+  
+  rel_vecs <- full_vecs[res_list[[n]]]
+  rl <- list()
+  last_end <- xs-rv
+  for(i in 1:length(rel_vecs)){
+    #print(i)
+    if(i==1){
+      start <- xs
+    } else {
+      start <- last_end+rv
+    } 
+    
+    if(i==length(rel_vecs)){
+      end <- xe 
+    } else {
+      end <- ELD[[1]]["x"]+rel_vecs[i]
+    }
+    last_end <- end
+    rl[[i]] <- rep(xnorm_vector[[res_list[[n]][i]]]["y"], abs(end-start+rv))
+  }
+  return(rl)
+}
 
 
