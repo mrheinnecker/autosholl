@@ -76,69 +76,72 @@ results <- lapply(files, function(file){
     ## check in fiji:
     export_dendrites(elongated_dendrites, "f:/data_sholl_analysis/test/example_data/dendrites.csv")
     
-    borders <- sapply(1:nrow(main_dendrites), function(n){
+    borders_vox <- lapply(1:nrow(main_dendrites), function(n){
       
       if(n!=nrow(main_dendrites)){
-        return(0.5*sum(main_dendrites$h_angle[n], main_dendrites$h_angle[n+1]))
+        h_angle <- 0.5*sum(main_dendrites$h_angle[n], main_dendrites$h_angle[n+1])
       } else {
         raw <- main_dendrites$h_angle[n]+0.5*(abs(360-main_dendrites$h_angle[n])+main_dendrites$h_angle[1])
         if(raw>360){
-          return(raw-360)
+          h_angle <- raw-360
         } else {
-          return(raw)
+          h_angle <- raw
         }
       }
       
+      elongate_3d_sphere(h_angle, 0, SOMA[["x"]], SOMA[["y"]], SOMA[["z"]], nc) %>%
+        select(x,y) %>%
+        return()
+      
     })      
     
-    borders_vox <- sapply(borders, function(h_angle){
-            
-            elongate_3d_sphere(h_angle, 0, SOMA[["x"]], SOMA[["y"]], SOMA[["z"]], nc) %>%
-              select(x,y) %>%
-              return()
-            
-    }, simplify=F)
+    # borders_vox <- sapply(borders, function(h_angle){
+    #         
+    #         elongate_3d_sphere(h_angle, 0, SOMA[["x"]], SOMA[["y"]], SOMA[["z"]], nc) %>%
+    #           select(x,y) %>%
+    #           return()
+    #         
+    # }, simplify=F)
     ### now select areas for cutoff use
     
     nELD <- 2
-    #dendrite_segments <- lapply(1:length(elongated_dendrites), function(nELD){
-    dendrite_segments <- lapply(c(2,4), function(nELD){  
-      print("dendrite")
+    dendrite_segments <- lapply(1:length(elongated_dendrites), function(nELD){
+    #dendrite_segments <- lapply(c(2,4), function(nELD){  
+      print(paste("dendrite:", nELD))
       ELD <- elongated_dendrites[[nELD]] 
-      
-
-      
-      
-      if(nELD==1){
-        top_border <- borders_vox[[length(borders)]]
-        bottom_border <- borders_vox[[1]]
-      } else {
-        top_border <- borders_vox[[nELD-1]]
-        bottom_border <- borders_vox[[nELD]]  
-      }
-      
+      avs <- 200 
       overall_vector <- ELD[[length(ELD)]][c("x", "y", "z")]-ELD[[1]][c("x", "y", "z")]
       
-      ################
+
       if(abs(overall_vector[1])>abs(overall_vector[2])){
-        ## horizontal dendrite oriantation
+################################################################################
+################################################################################
+################## horizonatl dendrite orientation #############################     
+################################################################################ 
+################################################################################        
         overall_length <- overall_vector["x"]
         rv <- overall_vector["x"]/abs(overall_vector["x"])
         if(rv==1){
+################################################################################  
+################## vector direction: right #####################################          
+################################################################################    
           pixels_to_image_border <- nc-ELD[[1]]["x"]
           ELD[[length(ELD)+1]] <- c(x=nc, ELD[[length(ELD)]][c("y", "z")], h_angle=0, v_angle=0)
           if(nELD==1){
             top_border <- borders_vox[[1]]
-            bottom_border <- borders_vox[[length(borders)]]
+            bottom_border <- borders_vox[[length(borders_vox)]]
           } else {
             top_border <- borders_vox[[nELD]]
             bottom_border <- borders_vox[[nELD-1]]  
           }
         } else {
+################################################################################  
+################## vector direction: left  #####################################          
+################################################################################          
           pixels_to_image_border <- 1-ELD[[1]]["x"]
           ELD[[length(ELD)+1]] <- c(x=1, ELD[[length(ELD)]][c("y", "z")], h_angle=180, v_angle=0)
           if(nELD==1){
-            top_border <- borders_vox[[length(borders)]]
+            top_border <- borders_vox[[length(borders_vox)]]
             bottom_border <- borders_vox[[1]]
           } else {
             top_border <- borders_vox[[nELD-1]]
@@ -146,72 +149,41 @@ results <- lapply(files, function(file){
           }
         }
       } else {
-        ## vertical dedrite oriantation
+################################################################################
+################################################################################
+################## vertical dendrite orientation ###############################        
+################################################################################ 
+################################################################################  
         overall_length <- overall_vector["y"]
         rv <- overall_vector["y"]/abs(overall_vector["y"])
         if(rv==1){
+################################################################################  
+################## vector direction: top   #####################################          
+################################################################################
           pixels_to_image_border <- nr-ELD[[1]]["y"]
           ELD[[length(ELD)+1]] <- c(ELD[[length(ELD)]]["x"], y=nr, ELD[[length(ELD)]]["z"], h_angle=90, v_angle=0)
         } else {
+################################################################################  
+################## vector direction: bottom ####################################          
+################################################################################
           pixels_to_image_border <- 1-ELD[[1]]["y"]
           ELD[[length(ELD)+1]] <- c(ELD[[length(ELD)]]["x"], y=1, ELD[[length(ELD)]]["z"], h_angle=270, v_angle=0)
         } 
       }                          
       
-      avs <- 200  
-      vector_pos <- lapply(c(1:(length(ELD)-1)), function(n){
-        
-        c(
-          xs=ELD[[n]][["x"]],
-          xe=ELD[[n+1]][["x"]],
-          ys=ELD[[n]][["y"]],
-          ye=ELD[[n+1]][["y"]],
-          zs=ELD[[n]][["z"]],
-          ze=ELD[[n+1]][["z"]]
-        ) %>%
-          return()
-        
-      }) %>% bind_rows() %>% rownames_to_column("id")
-      
-        
-      vectors <- lapply(1:length(ELD), function(PT){
-        if(PT==length(ELD)){return(NULL)}
-        return(c(ELD[[PT+1]][c("x", "y", "z")]-ELD[[PT]][c("x", "y", "z")],
-                 h_angle=ELD[[PT+1]]["h_angle"],
-                 l=sqrt(sum(abs(ELD[[PT+1]][c("x", "y")]-ELD[[PT]][c("x", "y")])^2))))
-        
-      }) %>%
-        compact()
-      xnorm_vector <- lapply(vectors, function(V){
-        return(V[c(1:3)]/abs(V["x"]))
-      })
-      ynorm_vector <-  lapply(vectors, function(V){
-        return(V[c(1:3)]/abs(V["y"]))
-      }) 
+      vector_pos <- create_df_of_vectors(ELD)
+      vectors <- create_rv_of_vectors(ELD)
+      xnorm_vector <- lapply(vectors, function(V){V[c(1:3)]/abs(V["x"])})
+      ynorm_vector <-  lapply(vectors, function(V){V[c(1:3)]/abs(V["y"])}) 
         
       n_segments <- abs(round(pixels_to_image_border/avs))
       use_length <- round(pixels_to_image_border/n_segments)
-
+      
+      res_list <- assign_vectors_to_segments(ELD, vector_pos, use_length, n_segments)
+      
       
       full_vecs <- bind_rows(vectors) %>%
-        pull(x) %>% cumsum() 
-      
-      res_list <- list()
-        
-      for(n in 1:n_segments){
-        start <-(n-1)*use_length+ELD[[1]]["x"]
-        end <-   n*use_length+ELD[[1]]["x"]
-        vecs <- vector_pos %>% rowwise() %>%
-            #mutate(t=ifelse(xs %in% c(start:end)|xe %in% c(start:end), T, F)) %>%
-          mutate(t=ifelse(length(intersect(start:end, xs:xe))>0, T, F)) %>%
-          filter(t==T) %>%
-          pull(id) 
-        if(length(vecs)==0){
-          res_list[[n]] <- as.numeric(res_list[[n-1]])
-        } else {
-          res_list[[n]] <- as.numeric(vecs)
-        }
-      }
+        pull(x) %>% cumsum()   
       
       final_list <- list()
       segment_list <- list()

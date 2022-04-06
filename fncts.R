@@ -554,6 +554,60 @@ export_dendrites <- function(elongated_dendrites, file_name){
 }
 
 
+create_df_of_vectors <- function(ELD){
+  lapply(c(1:(length(ELD)-1)), function(n){
+    
+    c(
+      xs=ELD[[n]][["x"]],
+      xe=ELD[[n+1]][["x"]],
+      ys=ELD[[n]][["y"]],
+      ye=ELD[[n+1]][["y"]],
+      zs=ELD[[n]][["z"]],
+      ze=ELD[[n+1]][["z"]]
+    ) %>%
+      return()
+    
+  }) %>% 
+    bind_rows() %>% 
+    rownames_to_column("id") %>%
+    return()
+}
+
+create_rv_of_vectors <- function(ELD){
+  lapply(1:length(ELD), function(PT){
+    if(PT==length(ELD)){return(NULL)}
+    return(c(ELD[[PT+1]][c("x", "y", "z")]-ELD[[PT]][c("x", "y", "z")],
+             h_angle=ELD[[PT+1]]["h_angle"],
+             l=sqrt(sum(abs(ELD[[PT+1]][c("x", "y")]-ELD[[PT]][c("x", "y")])^2))))
+    
+  }) %>%
+    compact() %>%
+    return()
+}
+
+assign_vectors_to_segments <- function(ELD, vector_pos, use_length, n_segments){
+  
+  res_list <- list()
+  
+  for(n in 1:n_segments){
+    start <-(n-1)*use_length+ELD[[1]]["x"]
+    end <-   n*use_length+ELD[[1]]["x"]
+    vecs <- vector_pos %>% rowwise() %>%
+      #mutate(t=ifelse(xs %in% c(start:end)|xe %in% c(start:end), T, F)) %>%
+      mutate(t=ifelse(length(intersect(start:end, xs:xe))>0, T, F)) %>%
+      filter(t==T) %>%
+      pull(id) 
+    if(length(vecs)==0){
+      res_list[[n]] <- as.numeric(res_list[[n-1]])
+    } else {
+      res_list[[n]] <- as.numeric(vecs)
+    }
+  }
+  return(res_list)
+}
+
+
+
 
 
 
