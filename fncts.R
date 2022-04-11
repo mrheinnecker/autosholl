@@ -478,6 +478,52 @@ deg2rad <- function(deg){(deg * pi) / (180)}
 
 #sl <- segment_list
 #file_name <- "f:/data_sholl_analysis/test/spec_segs/ggg.tif"
+
+
+test_segmentation <- function(sl, full_image, file_name, soma_reg){
+  QNT <- 0.9
+  
+  nosoma_image <- list("1"=full_image[[SOMA[["z"]]]])
+  
+  full_cutoffs <- lapply(sl, function(VOX){
+    #print(1)
+    cutoff <- lapply(nosoma_image, function(LAYER){
+      
+      return(LAYER[VOX])
+      
+    }) %>%
+      Reduce(function(x,y)c(x,y),.) %>%
+      quantile(QNT, na.rm=T) %>%
+      return()
+    
+  })
+  
+  new_image <- nosoma_image
+  
+  
+  for(i in 1:length(full_cutoffs)){
+    #cat(paste("\n  ", i))
+    cutoff <- full_cutoffs[[i]]
+    VOX <- sl[[i]]
+    for(l in 1:length(new_image)){
+      #print(l)
+      new_image[[l]][VOX][new_image[[l]][VOX]>=cutoff] <- 1
+      new_image[[l]][VOX][new_image[[l]][VOX]<cutoff] <- 0
+      
+      new_image[[l]] <- matrix(new_image[[l]], nrow = 1040)
+    }
+    
+  }
+  
+  writeTIFF(new_image, file_name)
+  
+}
+
+
+
+
+
+
 normalize_regions <- function(sl, full_image, file_name, soma_reg){
   QNT <- 0.9
   ## remove soma 
@@ -685,5 +731,54 @@ combine_vectors <- function(ELD, xs, xe, rv, full_vecs, xnorm_vector, res_list, 
   }
   return(rl)
 }
+
+#sdir <- "bottom"
+#cof <- bottom
+#bd <- bottom_border
+
+create_segment <- function(xs, xe, cof, line, nr, nc, bd, sdir, direction, n_orig){
+  if(sdir=="bottom"){
+    rob <- bd %>%
+      filter(x %in% c(xs:xe)) %>%
+      filter(y>cof) %>%
+      group_by(x) %>%
+      summarize(y=min(y))
+  } else {
+    rob <- bd %>%
+      filter(x %in% c(xs:xe)) %>%
+      filter(y<cof) %>%
+      group_by(x) %>%
+      summarize(y=min(y))
+  }
+  
+  top_line <- tibble(x=c(xs:xe),
+                     y=cof) %>%
+    filter(!x %in% rob$x) %>%
+    bind_rows(rob)%>%
+    filter(between(x, 1, nc),
+           between(y, 1, nr))
+  
+  #print(top_line)
+  
+    all_vox_raw <- lapply(top_line$x, function(X){
+      s <- top_line[[which(top_line$x==X), "y"]]
+      e <- line[[which(line$x==X), "y"]]
+      xn <- (X-1)*nr
+      return(c(s:e)+xn)
+      
+    }) %>% 
+      c(recursive=T)
+  
+  if(direction=="h"){
+    return(list(all_vox_raw, top_line))
+  } else {
+    sapply(all_vox_raw ,retransform_index, nr=nr, nr_orig=nr_orig) %>%
+      list(., top_line) %>%
+      return()
+  }
+  
+}
+
+
 
 
