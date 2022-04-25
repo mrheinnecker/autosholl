@@ -16,27 +16,27 @@
 #   
 # }
 
-select_intensity <- function(x,y,z,full_image){
-  #print(between(z, 1, length(full_image)))
+select_intensity <- function(x,y,z,img){
+  #print(between(z, 1, length(img)))
   
-  if(between(min(x), 1, ncol(full_image[[1]]))&between(max(x), 1, ncol(full_image[[1]]))&
-     between(min(y), 1, nrow(full_image[[1]]))&between(max(y), 1, nrow(full_image[[1]]))&
-     between(min(z), 1, length(full_image))&between(max(z), 1, length(full_image))){
+  if(between(min(x), 1, ncol(img[[1]]))&between(max(x), 1, ncol(img[[1]]))&
+     between(min(y), 1, nrow(img[[1]]))&between(max(y), 1, nrow(img[[1]]))&
+     between(min(z), 1, length(img))&between(max(z), 1, length(img))){
     #print(1)
     
-    # if(between(x, 1, ncol(full_image[[1]]))&
-    #    between(y, 1, nrow(full_image[[1]]))&
-    #    between(z, 1, length(full_image))){  
+    # if(between(x, 1, ncol(img[[1]]))&
+    #    between(y, 1, nrow(img[[1]]))&
+    #    between(z, 1, length(img))){  
     
-   # return(full_image[[z]][y,x])
-    return(lapply(z, function(Z){return(full_image[[Z]][y,x])}) %>% unlist() %>% median())
+   # return(img[[z]][y,x])
+    return(lapply(z, function(Z){return(img[[Z]][y,x])}) %>% unlist() %>% median())
   } else {
     return(NA)
   }
 }
 
 
-elongate_3d_sphere <- function(GRAD, zGRAD, x_start, y_start, z_start, r){
+elongate_3d_sphere <- function(GRAD, zGRAD, x_start, y_start, z_start, r, image){
 
   zr <- round(cos(deg2rad(zGRAD)), 10)
 
@@ -51,7 +51,7 @@ elongate_3d_sphere <- function(GRAD, zGRAD, x_start, y_start, z_start, r){
            x=ceiling(x_start+(n*xr*zr)),
            z=ceiling(z_start+(n*zo))) %>%
     rowwise() %>%
-    mutate(i=select_intensity(x,y,z,full_image),
+    mutate(i=select_intensity(x,y,z,image),
            deg=GRAD) %>%
     filter(!is.na(i)) %>%
     return()
@@ -299,7 +299,7 @@ find_dendritic_start_sites <- function(SOMA){
   
   mn = lapply(seq(deg_step,1,deg_step)*360, function(GRAD){
     
-    f <- elongate_3d_sphere(GRAD,0,SOMA[["x"]],SOMA[["y"]], SOMA[["z"]], 300)
+    f <- elongate_3d_sphere(GRAD,0,SOMA[["x"]],SOMA[["y"]], SOMA[["z"]], 300, full_image)
     
     take_until <- f %>%
       filter(i<0.75) %>%
@@ -360,7 +360,7 @@ find_dendritic_start_sites <- function(SOMA){
   
   rescored_maxima <- lapply(relevant_maxima$x, function(GRAD){
     
-    f <- elongate_3d_sphere(GRAD,0, SOMA[["x"]],SOMA[["y"]], SOMA[["z"]], soma_radius)
+    f <- elongate_3d_sphere(GRAD,0, SOMA[["x"]],SOMA[["y"]], SOMA[["z"]], soma_radius, full_image)
     
     # take_until <- f %>%
     #   filter(i<0.85) %>%
@@ -448,7 +448,7 @@ get_somata <- function(cube_size, r, deg_step ,data){
     c(z=Z,
       mn= lapply(seq(deg_step,1,deg_step)*360, function(GRAD){
         
-        f <- elongate_3d_sphere(GRAD, 0, xy_soma$x, xy_soma$y ,Z, 100)
+        f <- elongate_3d_sphere(GRAD, 0, xy_soma$x, xy_soma$y ,Z, 100, full_image)
         
         md <- abs(diff(f$i)) %>% max()
         
@@ -779,6 +779,393 @@ create_segment <- function(xs, xe, cof, line, nr, nc, bd, sdir, direction, n_ori
   
 }
 
+define_dendrite_from_raw_image <- function(DENDRITE){
+  
+  horizontal_subdivisions <- 60
+vertical_subdivisions <- 10
+horizontal_detection_angle <- 60
+vertical_detection_angle <- 12
+intensity_cutoff <- 0.5
+steps <- 10
+
+elongate_dendrite(DENDRITE %>% as.numeric() %>% set_names(nm=names(DENDRITE)),
+                  horizontal_subdivisions,
+                  vertical_subdivisions,
+                  horizontal_detection_angle,
+                  vertical_detection_angle,
+                  intensity_cutoff,
+                  steps) %>%
+  return()
+  
+  
+}
+
+segment_along_dendrite <- function(ELD_raw, seg_full_img, avs){
+  
+  overall_vector_raw <- ELD_raw[[length(ELD_raw)]][c("x", "y", "z")]-ELD_raw[[1]][c("x", "y", "z")]
+  ################################################################################
+  ## defining secondary elements accroding to vertical or horizonatal dendrite ###    
+  ################################################################################      
+  if(abs(overall_vector_raw[1])>abs(overall_vector_raw[2])){
+    direction <- "h"
+    ELD <- ELD_raw
+    overall_vector <- overall_vector_raw
+    borders_vox <- borders_vox_raw
+    nr <- nr_orig
+    nc <- nc_orig
+  } else {
+    direction <- "v"
+    ELD <- lapply(ELD_raw, function(VEC){
+      return(c(x=VEC[["y"]], y=VEC[["x"]], z=VEC[["z"]],  h_angle=VEC[["h_angle"]],  v_angle=VEC[["v_angle"]]))
+    })
+    overall_vector <- c(x=overall_vector_raw[["y"]], y=overall_vector_raw[["x"]], 
+                        z=overall_vector_raw[["z"]])
+    borders_vox <- lapply(borders_vox_raw, function(BORD){
+      tibble(x=BORD$y, y=BORD$x) %>%
+        return()
+    })
+    nc <- nr_orig
+    nr <- nc_orig
+  }
+  ################################################################################
+  ## defining tertiary elements accroding to v/h and direction (left/right) ######    
+  ################################################################################ 
+  overall_length <- overall_vector["x"]
+  rv <- overall_vector["x"]/abs(overall_vector["x"])      
+  
+  if((direction=="h"&rv==1)|(direction=="v"&rv==-1)){
+    top_border <- borders_vox[[selection_vector[[as.character(nELD)]]]]
+    bottom_border <- borders_vox[[selection_vector[[as.character(nELD-1)]]]]
+  } else {
+    top_border <- borders_vox[[selection_vector[[as.character(nELD-1)]]]]
+    bottom_border <- borders_vox[[selection_vector[[as.character(nELD)]]]]
+  }
+  
+  if(rv==1){
+    pixels_to_image_border <- nc-ELD[[1]]["x"]
+    ELD[[length(ELD)+1]] <- c(x=nc, ELD[[length(ELD)]][c("y", "z")], h_angle=0, v_angle=0)
+  } else {
+    pixels_to_image_border <- 1-ELD[[1]]["x"]
+    ELD[[length(ELD)+1]] <- c(x=1, ELD[[length(ELD)]][c("y", "z")], h_angle=180, v_angle=0)
+  }
+  ################################################################################
+  ################### calculate required data from input #########################    
+  ################################################################################  
+  vector_pos <- create_df_of_vectors(ELD)
+  vectors <- create_rv_of_vectors(ELD)
+  support_vectors <- apply(vector_pos, 1, function(VEC){
+    return(c(VEC["xs"], VEC["ys"], VEC["zs"]))
+  }, simplify=F)
+  xnorm_vector <- lapply(vectors, function(V){V[c(1:3)]/abs(V["x"])})
+  
+  n_segments <- abs(round(pixels_to_image_border/avs))
+  use_length <- round(pixels_to_image_border/n_segments)
+  
+  res_list <- assign_vectors_to_segments(ELD, vector_pos, use_length, n_segments)
+  
+  full_vecs <- bind_rows(vectors) %>%
+    pull(x) %>% cumsum()  
+  
+  y_coord_list <- list()
+  segment_list <- list()
+  segment_count <- 0
+  for(n in c(1:n_segments)){
+    cat(paste("\n  x_segment:",n))
+    ################################################################################
+    ################### set x and y variables for segment ##########################    
+    ################################################################################ 
+    xs <- ELD[[1]]["x"]+(n-1)*use_length+1
+    xe <- ELD[[1]]["x"]+n*use_length 
+    ys <- ifelse(n==1,
+                 as.numeric(ELD[[1]]["y"]),
+                 as.numeric(y_coord_list[[n-1]]))  
+    ## select relevant vectors for that segment 
+    rl <- combine_vectors(ELD, xs, xe, rv, full_vecs, xnorm_vector, res_list, n)  
+    
+    med_line <-   tibble(x=c(xs:xe)) %>%
+      mutate(fac=c(rl, recursive=T)) %>%
+      mutate(y=ceiling(ys+cumsum(fac))) %>%
+      filter(between(x, 1, nc),
+             between(y, 1, nr))
+    ## from here the segemt height and depth is measured until image border
+    med <- round(0.5*(max(med_line$y)+min(med_line$y)))
+    ## mean z layer of segment
+    mz <- round(0.5*sum(vector_pos[which(vector_pos$id==first(res_list[[n]])),]$zs, 
+                  vector_pos[which(vector_pos$id==last(res_list[[n]])),]$ze))
+    
+    
+    pix_to_bottom <- -med
+    pix_to_top <- nr-med
+    n_segments_top <- abs(round(pix_to_top/avs))
+    n_segments_bottom <- abs(round(pix_to_bottom/avs))
+    use_length_top <- round(pix_to_top/n_segments_top)
+    use_length_bottom <- round(pix_to_bottom/n_segments_bottom)
+    
+    
+    ## we also need to export all relevant vectors for that segment:
+    full_relevant_vectors <- lapply(res_list[[n]], function(V){
+      list(sv=as.numeric(support_vectors[[V]]),
+           rv=vectors[[V]][1:4]) %>% return()
+    })
+    
+    
+    ## if we only want one segment from the dendrite to top and bottom
+    if(seg_full_img==F){
+      n_segments_top <- 1
+      n_segments_bottom <- 1
+    }
+    
+    
+    
+    ## new loop for all segments
+    
+    start_list_top <- list()
+    line_list_top <- list()
+    
+    for(n_top in 1:n_segments_top){
+      
+      if(n_top==1){
+        start <- med
+        line <- med_line
+      } else {
+        start <- start_list_top[[n_top-1]]+1
+        line <- line_list_top[[n_top-1]]
+      }
+      
+      top <- start+use_length_top
+      if(top>nr){top <- nr}
+      
+      all_vox_top <- create_segment(xs, xe, top, line, nr, nc, top_border, "top",
+                                    direction, nr_orig)
+      
+      start_list_top[[n_top]] <- top
+      line_list_top[[n_top]] <- all_vox_top[[2]]
+      
+      segment_count <- segment_count+1
+      segment_list[[segment_count]] <- list(all_vox_top[[1]], mz, full_relevant_vectors, 
+                                            c(seg_id=segment_count,
+                                              dir="top",
+                                              rv=rv))
+      cat(paste("\n    top:", segment_count))
+    }
+    
+    start_list_bottom <- list()
+    line_list_bottom <- list()
+    
+    for(n_bottom in 1:n_segments_bottom){
+      
+      if(n_bottom==1){
+        start <- med
+        line <- med_line
+      } else {
+        start <- start_list_bottom[[n_bottom-1]]-1
+        line <- line_list_bottom[[n_bottom-1]]
+      }
+      
+      bottom <- start+use_length_bottom
+      if(bottom<1){bottom <- 1} 
+      
+      all_vox_bottom <- create_segment(xs, xe, bottom, line, nr, nc, bottom_border, "bottom",
+                                       direction, nr_orig)
+      
+      start_list_bottom[[n_bottom]] <- bottom
+      line_list_bottom[[n_bottom]] <- all_vox_bottom[[2]]
+      
+      segment_count <- segment_count+1
+      cat(paste("\n    bottom:", segment_count))
+      segment_list[[segment_count]] <- list(all_vox_bottom[[1]], mz, full_relevant_vectors, 
+                                            c(seg_id=segment_count,
+                                              dir="bottom",
+                                              rv=rv))
+    }       
+    
+    y_coord_list[[n]] <- med_line[[nrow(med_line), "y"]]
+    
+    
+  }
+  
+  ## for further steps also the z layer of the vectors is required
+  
+  # lapply(res_list, function(n){
+  #   
+  #   mz <- 0.5*sum(vector_pos[which(vector_pos$id==first(res_list[[n]]))], vector_pos[which(vector_pos$id==last(res_list[[n]]))])
+  #   
+  # })
+  
+  all_vectors <- lapply(1:length(vectors), function(V){
+    
+    list(sv=as.numeric(support_vectors[[V]]),
+         rv=vectors[[V]][1:4])
+    
+  })
+  
+  return(list(segment_list, all_vectors, vector_pos))  
+
+  
+}
+
+
+remove_soma <- function(full_image, soma_reg, SOMA){
+  
+  lapply(1:length(full_image), function(n){
+    diff <- abs(SOMA[["z"]]-n)
+    LAYER <- full_image[[n]]
+    
+    LAYER[c((soma_reg$y-diff*2):(soma_reg$yend+diff*2)), c((soma_reg$x-diff*2):(soma_reg$xend+diff*2))] <- 0
+    return(LAYER)
+    
+  }) %>%
+    return()
+  
+}
 
 
 
+binarise_image <- function(sl, nosoma_image, QNT){
+  #QNT <- 0.9
+  ## remove soma 
+  # nosoma_image <- lapply(1:length(full_image), function(n){
+  #   diff <- abs(SOMA[["z"]]-n)
+  #   LAYER <- full_image[[n]]
+  #   
+  #   LAYER[c((soma_reg$y-diff*2):(soma_reg$yend+diff*2)), c((soma_reg$x-diff*2):(soma_reg$xend+diff*2))] <- NA
+  #   return(LAYER)
+  #   
+  # })
+  
+  
+  full_cutoffs <- lapply(sl, function(VOX){
+    print(1)
+    cutoff <- lapply(nosoma_image, function(LAYER){
+      
+      return(LAYER[VOX])
+      
+    }) %>%
+      Reduce(function(x,y)c(x,y),.) %>%
+      quantile(QNT, na.rm=T) %>%
+      return()
+    
+  })
+  
+  new_image <- nosoma_image
+  
+  
+  for(i in 1:length(full_cutoffs)){
+    cat(paste("\n  ", i))
+    cutoff <- full_cutoffs[[i]]
+    VOX <- sl[[i]]
+    for(l in 1:length(new_image)){
+      #print(l)
+      new_image[[l]][VOX][new_image[[l]][VOX]>=cutoff] <- 1
+      new_image[[l]][VOX][new_image[[l]][VOX]<cutoff] <- 0
+      
+      new_image[[l]] <- matrix(new_image[[l]], nrow = 1040)
+    }
+    
+  }
+  
+  writeTIFF(new_image, "f:/data_sholl_analysis/test/spec_segs/bintest.tif")
+  return(new_image)
+}
+
+VEC <- nth(d1, 2)[[1]]
+
+cart2pol_vec <- function(VEC){
+  sv <- VEC[[1]]
+  rv <- VEC[[2]]
+  #d_p_sv <- c(xmin, ymin)-sv[1:2]
+  # dist p zu SV
+  d_p_sv <- sv[1:2]-c(1,1)
+  
+  cp <- d_p_sv[[1]]*rv[[2]]-d_p_sv[[2]]*rv[[1]]
+  
+  # betrag des RV
+  d_rv <- sqrt(rv[[1]]^2+rv[[2]]^2)
+  
+  #rho <- abs(cp/d_rv)
+  rho <- cp/d_rv
+  
+  if(between(rv[[4]],0, 90)){
+    A <- 90
+  } else if(between(rv[[4]],90, 180)){
+    A <- 180
+  } else if(between(rv[[4]],180, 270)){
+    A <- 180
+  } else {
+    A <- 90
+  }
+  
+  
+  
+  theta <- deg2rad(A-rv[[4]])
+  
+  x_coords <- c(sv[[1]], sv[[1]]+rv[[1]])
+  
+  return(c(rho=rho, theta=theta, xmin=min(x_coords), xmax=max(x_coords)))
+}
+
+
+
+#inp_raw <- d1[[1]]
+fill_segment_to_rectangle <- function(inp){
+  #inp <- first(inp_raw)
+  #all_vecs <- last(inp_raw)
+  segment <- first(inp)
+  
+  df <- lapply(segment, get_xy_index, nr=1040)
+  
+  xmax <- sapply(df, first) %>% max()
+  xmin <- sapply(df, first) %>% min()
+  ymax <- sapply(df, last) %>% max()
+  ymin <- sapply(df, last) %>% min()
+  
+  
+  ## transform vectors of segment to polar coordinates
+  all_vecs <- lapply(nth(inp,3), function(VEC){
+    sv <- VEC[[1]]
+    rv <- VEC[[2]]
+
+    d_p_sv <- c(xmin, ymin)-sv[1:2]
+
+    cp <- abs(d_p_sv[[1]]*rv[[2]]-d_p_sv[[2]]*rv[[1]])
+
+    d_rv <- sqrt(rv[[1]]^2+rv[[2]]^2)
+
+    rho <- abs(cp/d_rv)
+
+    theta <- deg2rad(180-rv[[4]])
+
+    x_coords <- c(sv[[1]], sv[[1]]+rv[[1]])
+
+     return(c(rho=rho, theta=theta, xmin=min(x_coords), xmax=max(x_coords)))
+  })
+  
+  
+  all_vox <- lapply(c(xmin:xmax), function(X){
+    sapply(ymin:ymax, function(Y){
+      get_single_index(X, Y, 1040)
+    })
+  }) %>% c(recursive=T)
+  
+  list(voi=segment,
+       fv=all_vox[-which(all_vox %in% segment)],
+       nr=ymax-ymin+1,
+       nc=xmax-xmin+1,
+       origin=c(x=xmin, y=ymin),
+       xmin=xmin,
+       xmax=xmax,
+       ymin=ymin,
+       ymax=ymax,
+       z=nth(inp, 2),
+       main_vecs=all_vecs
+       ) %>% c(., inp[[4]]) %>%
+    return()
+  
+}
+
+pol2car <- function(r, theta){
+  
+  b=r/sin(theta)
+  a=(-cos(theta))/sin(theta)
+  return(c(a=a,b=b))
+}
