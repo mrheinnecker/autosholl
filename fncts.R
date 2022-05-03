@@ -235,6 +235,7 @@ screen_for_dendrite_elongation <- function(pos,
 
 
 elongate_dendrite <- function(DENDRITE,
+                              SOMA,
                   horizontal_subdivisions,
                   vertical_subdivisions,
                   horizontal_detection_angle,
@@ -268,8 +269,8 @@ elongate_dendrite <- function(DENDRITE,
     knot_list[[c]] <- next_pos %>% set_names(c("x","y","z", "h_angle", "v_angle"))
     #print(Sys.time()-st)
   }
-  return(knot_list[3:c-1])
-
+  return(append(list(c(x=round(SOMA$x), y=round(SOMA$y), z=round(SOMA$z), h_angle=DENDRITE[["h_angle"]], v_angle=0)),knot_list[3:c-1]))
+  #return(knot_list[3:c-1])
 
 }
 
@@ -520,6 +521,72 @@ test_segmentation <- function(sl, full_image, file_name, soma_reg){
 }
 
 
+#nosoma_image <- full_image
+#VOX <- sl[[1]]
+bi2 <- function(sl, nosoma_image, file_name){
+  
+  full_cutoffs <- lapply(sl, function(VOX){
+    #print(1)
+    all_vox_raw <- lapply(1:length(nosoma_image), function(L){
+      
+      LAYER <- nosoma_image[[L]]
+      
+      return(LAYER[VOX])
+      
+    }) %>%
+      Reduce(function(x,y)c(x,y),.) 
+    
+    all_vox <- all_vox_raw[all_vox_raw!=0]
+    
+    dens_func <- density(all_vox, bw=0.001) 
+    
+    #ggplot(tibble(x=dens_func$x,y=dens_func$y), aes(x=x, y=y))+ geom_line()
+    
+    # all_local_extreme <- get_minmax(dens_func) %>%
+    #   filter(x<0.95)
+    # 
+    # loc_ex <- all_local_extreme[which(all_local_extreme$y==max(all_local_extreme$y)),]$x
+    #mn <- min(all_vox)
+    #mx <- max(all_vox)
+    
+    df <- tibble(x=dens_func$x, y=dens_func$y, d1=c(0, diff(dens_func$y)))%>%
+      filter(between(x, 0.05, 0.95))
+    
+    dec_row <- which(df$d1==min(df$d1))
+    
+    if(dec_row==nrow(df)){dec_row <- dec_row <- dec_row-1}
+    
+    strongest_decrease <- df[c(dec_row, dec_row+1),c(1,2)]
+    
+    diffs <- apply(strongest_decrease, 2, diff)
+    
+    cutoff <- strongest_decrease[[1,"x"]]+abs(strongest_decrease[[1,"y"]]/diffs[["y"]])*abs(diffs[["x"]])
+    
+    return(cutoff)
+    
+  })
+  
+  
+  new_image <- nosoma_image
+  
+  
+  for(i in 1:length(full_cutoffs)){
+    #cat(paste("\n  ", i))
+    cutoff <- full_cutoffs[[i]]
+    VOX <- sl[[i]]
+    for(l in 1:length(new_image)){
+      #print(l)
+      #cutoff <- cutoffs[[l]]
+      new_image[[l]][VOX][new_image[[l]][VOX]>=cutoff] <- 1
+      new_image[[l]][VOX][new_image[[l]][VOX]<cutoff] <- 0
+      new_image[[l]] <- matrix(new_image[[l]], nrow = 1040)
+    }
+    
+  }
+  
+  writeTIFF(new_image, file_name)
+  #return(new_image)
+}
 
 
 
@@ -527,15 +594,15 @@ test_segmentation <- function(sl, full_image, file_name, soma_reg){
 normalize_regions <- function(sl, full_image, file_name, soma_reg){
   QNT <- 0.9
   ## remove soma 
-  nosoma_image <- lapply(1:length(full_image), function(n){
-    diff <- abs(SOMA[["z"]]-n)
-    LAYER <- full_image[[n]]
-    
-    LAYER[c((soma_reg$y-diff*2):(soma_reg$yend+diff*2)), c((soma_reg$x-diff*2):(soma_reg$xend+diff*2))] <- NA
-    return(LAYER)
-    
-  })
-  
+  # nosoma_image <- lapply(1:length(full_image), function(n){
+  #   diff <- abs(SOMA[["z"]]-n)
+  #   LAYER <- full_image[[n]]
+  #   
+  #   LAYER[c((soma_reg$y-diff*2):(soma_reg$yend+diff*2)), c((soma_reg$x-diff*2):(soma_reg$xend+diff*2))] <- NA
+  #   return(LAYER)
+  #   
+  # })
+  nosoma_image <- full_image
   
     
   full_cutoffs <- lapply(sl, function(VOX){
@@ -551,7 +618,7 @@ normalize_regions <- function(sl, full_image, file_name, soma_reg){
     
   })
   
-  new_image <- nosoma_image
+  new_image <- full_image
   
   
   for(i in 1:length(full_cutoffs)){
@@ -778,6 +845,212 @@ create_segment <- function(xs, xe, cof, line, nr, nc, bd, sdir, direction, n_ori
   }
   
 }
+
+
+
+create_raster <- function(nELD, avs){
+  cat(paste("dendrite:", nELD))
+  ################################################################################
+  ######################## defining basic elements ###############################    
+  ################################################################################       
+  ELD_raw <- elongated_dendrites[[nELD]]  
+  overall_vector_raw <- ELD_raw[[length(ELD_raw)]][c("x", "y", "z")]-ELD_raw[[1]][c("x", "y", "z")]
+  ################################################################################
+  ## defining secondary elements accroding to vertical or horizonatal dendrite ###    
+  ################################################################################      
+  if(abs(overall_vector_raw[1])>abs(overall_vector_raw[2])){
+    direction <- "h"
+    ELD <- ELD_raw
+    overall_vector <- overall_vector_raw
+    borders_vox <- borders_vox_raw
+    nr <- nr_orig
+    nc <- nc_orig
+  } else {
+    direction <- "v"
+    ELD <- lapply(ELD_raw, function(VEC){
+      return(c(x=VEC[["y"]], y=VEC[["x"]], z=VEC[["z"]],  h_angle=VEC[["h_angle"]],  v_angle=VEC[["v_angle"]]))
+    })
+    overall_vector <- c(x=overall_vector_raw[["y"]], y=overall_vector_raw[["x"]], 
+                        z=overall_vector_raw[["z"]])
+    borders_vox <- lapply(borders_vox_raw, function(BORD){
+      tibble(x=BORD$y, y=BORD$x) %>%
+        return()
+    })
+    nc <- nr_orig
+    nr <- nc_orig
+  }
+  ################################################################################
+  ## defining tertiary elements accroding to v/h and direction (left/right) ######    
+  ################################################################################ 
+  overall_length <- overall_vector["x"]
+  rv <- overall_vector["x"]/abs(overall_vector["x"])      
+  
+  if((direction=="h"&rv==1)|(direction=="v"&rv==-1)){
+    top_border <- borders_vox[[selection_vector[[as.character(nELD)]]]]
+    bottom_border <- borders_vox[[selection_vector[[as.character(nELD-1)]]]]
+  } else {
+    top_border <- borders_vox[[selection_vector[[as.character(nELD-1)]]]]
+    bottom_border <- borders_vox[[selection_vector[[as.character(nELD)]]]]
+  }
+  
+  if(rv==1){
+    pixels_to_image_border <- nc-ELD[[1]]["x"]
+    ELD[[length(ELD)+1]] <- c(x=nc, ELD[[length(ELD)]][c("y", "z")], h_angle=0, v_angle=0)
+  } else {
+    pixels_to_image_border <- 1-ELD[[1]]["x"]
+    ELD[[length(ELD)+1]] <- c(x=1, ELD[[length(ELD)]][c("y", "z")], h_angle=180, v_angle=0)
+  }
+  ################################################################################
+  ################### calculate required data from input #########################    
+  ################################################################################  
+  vector_pos <- create_df_of_vectors(ELD)
+  vectors <- create_rv_of_vectors(ELD)
+  xnorm_vector <- lapply(vectors, function(V){V[c(1:3)]/abs(V["x"])})
+  
+  n_segments <- abs(round(pixels_to_image_border/avs))
+  use_length <- round(pixels_to_image_border/n_segments)
+  
+  res_list <- assign_vectors_to_segments(ELD, vector_pos, use_length, n_segments)
+  
+  full_vecs <- bind_rows(vectors) %>%
+    pull(x) %>% cumsum()  
+  
+  y_coord_list <- list()
+  segment_list <- list()
+  segment_count <- 0
+  for(n in c(1:n_segments)){
+    
+    #print(n)
+    
+    cat(paste("\n  x_segment:",n))
+    ################################################################################
+    ################### set x and y variables for segment ##########################    
+    ################################################################################ 
+    xs <- ELD[[1]]["x"]+(n-1)*use_length+1
+    xe <- ELD[[1]]["x"]+n*use_length 
+    ys <- ifelse(n==1,
+                 as.numeric(ELD[[1]]["y"]),
+                 as.numeric(y_coord_list[[n-1]]))  
+    ## select relevant vectors for that segment 
+    rl <- combine_vectors(ELD, xs, xe, rv, full_vecs, xnorm_vector, res_list, n)  
+    
+    med_line <-   tibble(x=c(xs:xe)) %>%
+      mutate(fac=c(rl, recursive=T)) %>%
+      mutate(y=ceiling(ys+cumsum(fac))) %>%
+      filter(between(x, 1, nc),
+             between(y, 1, nr))
+    ## from here the segemt height and depth is measured until image border
+    med <- round(0.5*(max(med_line$y)+min(med_line$y)))
+    
+    pix_to_bottom <- -med
+    pix_to_top <- nr-med
+    n_segments_top <- abs(round(pix_to_top/avs))
+    n_segments_bottom <- abs(round(pix_to_bottom/avs))
+    use_length_top <- round(pix_to_top/n_segments_top)
+    use_length_bottom <- round(pix_to_bottom/n_segments_bottom)
+    
+    ## new loop for all segments
+    
+    start_list_top <- list()
+    line_list_top <- list()
+    
+    for(n_top in 1:n_segments_top){
+      
+      if(n_top==1){
+        start <- med
+        line <- med_line
+      } else {
+        start <- start_list_top[[n_top-1]]+1
+        line <- line_list_top[[n_top-1]]
+      }
+      
+      top <- start+use_length_top
+      if(top>nr){top <- nr}
+      
+      all_vox_top <- create_segment(xs, xe, top, line, nr, nc, top_border, "top",
+                                    direction, nr_orig)
+      
+      start_list_top[[n_top]] <- top
+      line_list_top[[n_top]] <- all_vox_top[[2]]
+      
+      segment_count <- segment_count+1
+      segment_list[[segment_count]] <- all_vox_top[[1]]
+      cat(paste("\n    top:", segment_count))
+    }
+    
+    start_list_bottom <- list()
+    line_list_bottom <- list()
+    
+    for(n_bottom in 1:n_segments_bottom){
+      
+      if(n_bottom==1){
+        start <- med
+        line <- med_line
+      } else {
+        start <- start_list_bottom[[n_bottom-1]]-1
+        line <- line_list_bottom[[n_bottom-1]]
+      }
+      
+      bottom <- start+use_length_bottom
+      if(bottom<1){bottom <- 1} 
+      
+      all_vox_bottom <- create_segment(xs, xe, bottom, line, nr, nc, bottom_border, "bottom",
+                                       direction, nr_orig)
+      
+      start_list_bottom[[n_bottom]] <- bottom
+      line_list_bottom[[n_bottom]] <- all_vox_bottom[[2]]
+      
+      segment_count <- segment_count+1
+      cat(paste("\n    bottom:", segment_count))
+      segment_list[[segment_count]] <- all_vox_bottom[[1]]
+    }       
+    
+    y_coord_list[[n]] <- med_line[[nrow(med_line), "y"]]
+    
+    
+  }
+  return(segment_list)  
+}
+
+
+
+
+remove_soma <- function(SOMA, soma_radius, full_image){
+  
+  nosoma_image <- lapply(1:length(full_image), function(n){
+  
+    r <- soma_radius+abs(round(SOMA$z)-n)
+    circ <- lapply(c(-r:r), function(X){
+    
+      y=sqrt(r^2-X^2)
+      
+      bottom <- round(SOMA$y-y)
+      top <- round(SOMA$y+y)
+      
+      # lapply(c(bottom:top), function(Y){
+      #   
+      # })
+      
+      lapply(c(bottom:top), get_single_index, x=X+round(SOMA$x), nr=nr_orig) %>%
+        return()
+    
+    }) %>% unlist() 
+    
+    LAYER <- full_image[[n]]
+    LAYER[circ] <- 0
+    
+    return(LAYER)
+  })  
+  
+  
+  return(nosoma_image)
+  
+}
+
+
+
+
+
 
 
 
