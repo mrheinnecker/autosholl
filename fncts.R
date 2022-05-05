@@ -1075,6 +1075,7 @@ remove_soma <- function(SOMA, soma_radius, full_image){
 
 
 dist_pts <- function(x1, y1, z1, x2, y2, z2){
+
   
   sqrt((x1-x2)^2+(y1-y2)^2+(z1-z2)^2)
   
@@ -1184,6 +1185,7 @@ define_full_vector_info <- function(ELD){
 }
 
 #start <- start_b
+#elgt_len <- round(len_b)
 screen_subdendrite_starts <- function(start, rel_z_layer, det_rad, elgt_len, VEC){
   
   df <- lapply(rel_z_layer, function(ZS){

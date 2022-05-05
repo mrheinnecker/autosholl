@@ -130,8 +130,11 @@ results <- lapply(files, function(file){
       rel_vecs <- rel_vecs_raw[c(2:length(rel_vecs_raw))]
       full_vecs <- full_vecs_raw[c(2:length(full_vecs_raw))]
       
-      v <- 1
+      v <- 2
       #all_subdendrites <- lapply(1:3, function(v){
+      
+      
+      
       all_subdendrites <- lapply(1:length(rel_vecs), function(v){ 
         cat(paste("\nvec:",v))
         
@@ -149,7 +152,7 @@ results <- lapply(files, function(file){
           start_b <- elongate_line(ortho_b, 0, VEC[["xs"]], VEC[["ys"]], VEC[["zs"]], det_rad)        
         } else {
           prevVEC <- rel_vecs[[v-1]]
-          elgt_start <- abs(det_rad*tan(deg2rad(0.5*abs((VEC[["ha"]]-90)-(prevVEC[["ha"]]-90)))))
+          elgt <- abs(det_rad*tan(deg2rad(0.5*abs((VEC[["ha"]]-90)-(prevVEC[["ha"]]-90)))))
           
           if(prevVEC[["ha"]]>VEC[["ha"]]){
             
@@ -159,6 +162,8 @@ results <- lapply(files, function(file){
             start_t <- elongate_line(ortho_t, 0, adj_t[["x"]], adj_t[["y"]], adj_t[["z"]], det_rad)
             start_b <- elongate_line(ortho_b, 0, adj_b[["x"]], adj_b[["y"]], adj_b[["z"]], det_rad)
             
+            add_for_start_t <- elgt
+            add_for_start_b <- -elgt
           } else {
             
             adj_b <- elongate_line(VEC[["ha"]]-180, 0, VEC[["xs"]], VEC[["ys"]], VEC[["zs"]], elgt)
@@ -167,6 +172,8 @@ results <- lapply(files, function(file){
             start_t <- elongate_line(ortho_t, 0, adj_t[["x"]], adj_t[["y"]], adj_t[["z"]], det_rad)
             start_b <- elongate_line(ortho_b, 0, adj_b[["x"]], adj_b[["y"]], adj_b[["z"]], det_rad)
             
+            add_for_start_t <- -elgt
+            add_for_start_b <- elgt
           }
            
         }
@@ -180,11 +187,11 @@ results <- lapply(files, function(file){
           elgt_end <- abs(det_rad*tan(deg2rad(0.5*abs((VEC[["ha"]]-90)-(nextVEC[["ha"]]-90)))))
           
           if(nextVEC[["ha"]]>VEC[["ha"]]){
-            len_b <- VEC[["l"]]+elgt_end
-            len_t <- VEC[["l"]]-elgt_end
+            len_b <- VEC[["l"]]+elgt_end+elgt
+            len_t <- VEC[["l"]]-elgt_end+elgt
           } else {
-            len_b <- VEC[["l"]]-elgt_end
-            len_t <- VEC[["l"]]+elgt_end
+            len_b <- VEC[["l"]]-elgt_end+elgt
+            len_t <- VEC[["l"]]+elgt_end+elgt
           }
           
         } else {
@@ -205,8 +212,8 @@ results <- lapply(files, function(file){
         
         ## TOP line
         
-        df_top <- screen_subdendrite_starts(start_t, rel_z_layer, det_rad, len_t, VEC)
-        df_bottom <- screen_subdendrite_starts(start_b, rel_z_layer, det_rad, len_b, VEC)
+        df_top <- screen_subdendrite_starts(start_t, rel_z_layer, det_rad, round(len_t), VEC)
+        df_bottom <- screen_subdendrite_starts(start_b, rel_z_layer, det_rad, round(len_b), VEC)
         
         cat("\n  screen finished")
         
@@ -221,20 +228,37 @@ results <- lapply(files, function(file){
         
         if(nrow(df_centers)==0){return(NULL)}
         
-        #SUBD <- df_centers[1,]
+        return(df_centers)
+        
+      })  
+      
+      
+      df_centers <- all_subdendrites %>% compact() %>% bind_rows() #%>%
+        #mutate_all(.funs=as.numeric) #%>%
+        #rownames_to_column("id") 
+       
+      full_dendrite <- bind_rows(full_vecs) %>% mutate_all(.funs = as.numeric)
+       
+        SUBD <- df_centers[1,]
         
         cat(paste("\n  fitting", nrow(df_centers), "subdendrites"))
         rescored_subdendrites <- apply(df_centers, 1, function(SUBD){
         
-          #print(SUBD[[1]])
+          #cat(paste("\ncluster:",SUBD[["id"]]))
           
-          df_dist_raw <- FVEC %>%
+          #SUBD <- SUBD_raw %>% as_tibble() %>% mutate_all(.funs = as.numeric)
+          
+          
+          
+          df_dist_raw <- full_dendrite %>%
             rowwise() %>%
-            mutate(dist=dist_pts(x,y,z,SUBD[["x"]],SUBD[["y"]],SUBD[["z"]]),
-                   ha=get_ha(x,y,SUBD[["x"]],SUBD[["y"]]),
-                   va=get_va(dist, z, SUBD[["z"]])) %>%
+            mutate(dist=dist_pts(x,y,z,as.numeric(SUBD[["x"]]),as.numeric(SUBD[["y"]]),as.numeric(SUBD[["z"]])),
+                   ha=get_ha(x,y,as.numeric(SUBD[["x"]]),as.numeric(SUBD[["y"]])),
+                   va=get_va(dist, z, as.numeric(SUBD[["z"]]))) %>%
             filter(dist<=4*det_rad) #%>%
           if(nrow(df_dist_raw)==0){return(NULL)}
+          
+          
           
           
           df_dist <- df_dist_raw %>%
@@ -253,6 +277,9 @@ results <- lapply(files, function(file){
           return(final_intersection)
           
         }) %>% compact() %>% bind_rows()
+        
+        
+        
         if(nrow(rescored_subdendrites)==0){return(NULL)}
         return(rescored_subdendrites)
         
@@ -269,6 +296,10 @@ results <- lapply(files, function(file){
       lapply(function(x){
         arrange(x, dist_to_soma)
       }) %>% bind_rows()
+    
+    
+    all_sbd <- rescored_subdendrites %>%
+      arrange(dist_to_soma)
     
     ## export dendrites for Fiji check
         fiji_ctrl <- all_sbd %>%
@@ -288,7 +319,7 @@ results <- lapply(files, function(file){
           select(-id)
         
         write_csv(t, 
-                  file="f:/data_sholl_analysis/test/example_data/subdendrites_4x_adj_overlaps.csv")
+                  file="f:/data_sholl_analysis/test/example_data/subdendrites_all_in_one.csv")
 
     
   }) # soma
