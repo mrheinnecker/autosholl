@@ -1196,13 +1196,19 @@ screen_subdendrite_starts <- function(start, rel_z_layer, det_rad, elgt_len, VEC
   }) %>% bind_rows() %>% rowwise() %>%
     mutate(dist=dist_pts(x, y, z, round(SOMA[["x"]]), round(SOMA[["y"]]), round(SOMA[["z"]])))
   
-  df_filtered <- df %>% 
+
+  
+  return(df)
+}
+
+sss2 <- function(df){
+
+  #
+    df_filtered <- df %>% 
     filter(i!=0,
            dist>2.5*soma_radius) %>%
-    select(x,z)
-  
-  if(nrow(df_filtered)==0){return(NULL)}
-  
+    select(x,y,z)
+  if(nrow(df_filtered)==0){return(NULL)} 
   df_clustered <- df_filtered %>% 
     ungroup() %>%
     mutate(c=fpc::dbscan(df_filtered, eps = 3.5, MinPts = 15)$cluster) %>%

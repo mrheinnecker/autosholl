@@ -201,11 +201,6 @@ results <- lapply(files, function(file){
           
         }
         
-     #   adj_start <- elongate_line(VEC[["ha"]]-180, 0, VEC[["xs"]], VEC[["ys"]], VEC[["zs"]], 2*det_rad)
-        
-    #    start_t <- elongate_line(ortho_t, 0, adj_start[["x"]], adj_start[["y"]], adj_start[["z"]], det_rad)
-    #    start_b <- elongate_line(ortho_b, 0, adj_start[["x"]], adj_start[["y"]], adj_start[["z"]], det_rad)
-        
         rel_z_layer <- seq(VEC[["zs"]]-z_range, VEC[["zs"]]+z_range, 1) %>%
           .[between(., 1, length(full_image))]
         
@@ -215,7 +210,9 @@ results <- lapply(files, function(file){
         df_top <- screen_subdendrite_starts(start_t, rel_z_layer, det_rad, round(len_t), VEC)
         df_bottom <- screen_subdendrite_starts(start_b, rel_z_layer, det_rad, round(len_b), VEC)
         
-        cat("\n  screen finished")
+        return(list(df_top, df_bottom))
+        
+        # cat("\n  screen finished")
         
         #### this for top and bottom
         
@@ -224,16 +221,23 @@ results <- lapply(files, function(file){
       
         #SUBD <- df_centers[1,]
         
-        df_centers <- bind_rows(list(df_top, df_bottom) %>% compact())
-        
-        if(nrow(df_centers)==0){return(NULL)}
-        
-        return(df_centers)
+        # df_centers <- bind_rows(list(df_top, df_bottom) %>% compact())
+        # 
+        # if(nrow(df_centers)==0){return(NULL)}
+        # 
+        # return(df_centers)
         
       })  
       
+      df_comb_t <- lapply(all_subdendrites, first) %>% compact() %>% bind_rows()
+      df_comb_b <- lapply(all_subdendrites, last) %>% compact() %>% bind_rows()
       
-      df_centers <- all_subdendrites %>% compact() %>% bind_rows() #%>%
+      
+      df_center_t <- sss2(df_comb_t)
+      df_center_b <- sss2(df_comb_b)
+      
+      
+      df_centers <- bind_rows(df_center_t, df_center_b) #%>%
         #mutate_all(.funs=as.numeric) #%>%
         #rownames_to_column("id") 
        
@@ -319,7 +323,7 @@ results <- lapply(files, function(file){
           select(-id)
         
         write_csv(t, 
-                  file="f:/data_sholl_analysis/test/example_data/subdendrites_all_in_one.csv")
+                  file="f:/data_sholl_analysis/test/example_data/subdendrites_fin.csv")
 
     
   }) # soma
