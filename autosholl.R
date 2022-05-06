@@ -123,115 +123,15 @@ results <- lapply(files, function(file){
       det_rad <- 30
       z_range <- 10
       
-       ## define x-y start points 
       rel_vecs_raw <- main_vectors[[n]]
       full_vecs_raw <- main_vectors_full[[n]]
       
       rel_vecs <- rel_vecs_raw[c(2:length(rel_vecs_raw))]
       full_vecs <- full_vecs_raw[c(2:length(full_vecs_raw))]
       
-      v <- 2
-      #all_subdendrites <- lapply(1:3, function(v){
+      full_dendrite <- bind_rows(full_vecs) %>% mutate_all(.funs = as.numeric)
       
-      
-      
-      all_sorrounding_vox <- lapply(1:length(rel_vecs), function(v){ 
-        cat(paste("\nvec:",v))
-        
-        VEC <- rel_vecs[[v]]
-        FVEC <- full_vecs[[v]]
-        
-        ortho_t <- VEC[["ha"]]+90
-        ortho_b <- VEC[["ha"]]-90
-      
-        rel_z_layer <- seq(VEC[["zs"]]-z_range, VEC[["zs"]]+z_range, 1) %>%
-          .[between(., 1, length(full_image))]
-        
-        df_circ_end <- NULL
-        
-        ## define starts
-          
-        if(v==1){
-          start_t <- elongate_line(ortho_t, 0, VEC[["xs"]], VEC[["ys"]], VEC[["zs"]], det_rad)
-          start_b <- elongate_line(ortho_b, 0, VEC[["xs"]], VEC[["ys"]], VEC[["zs"]], det_rad)  
-          elgt <- 0
-          add_for_start_b <- 0
-          add_for_start_t <- 0
-        } else {
-          prevVEC <- rel_vecs[[v-1]]
-          elgt <- abs(det_rad*tan(deg2rad(0.5*abs((VEC[["ha"]]-90)-(prevVEC[["ha"]]-90)))))
-          
-          if(prevVEC[["ha"]]>VEC[["ha"]]){
-            
-            adj_t <- elongate_line(VEC[["ha"]]-180, 0, VEC[["xs"]], VEC[["ys"]], VEC[["zs"]], elgt)
-            adj_b <- elongate_line(VEC[["ha"]], 0, VEC[["xs"]], VEC[["ys"]], VEC[["zs"]], elgt)
-            
-            start_t <- elongate_line(ortho_t, 0, adj_t[["x"]], adj_t[["y"]], adj_t[["z"]], det_rad)
-            start_b <- elongate_line(ortho_b, 0, adj_b[["x"]], adj_b[["y"]], adj_b[["z"]], det_rad)
-            
-            add_for_start_t <- elgt
-            add_for_start_b <- -elgt
-          } else {
-            
-            adj_b <- elongate_line(VEC[["ha"]]-180, 0, VEC[["xs"]], VEC[["ys"]], VEC[["zs"]], elgt)
-            adj_t <- elongate_line(VEC[["ha"]], 0, VEC[["xs"]], VEC[["ys"]], VEC[["zs"]], elgt)
-            
-            start_t <- elongate_line(ortho_t, 0, adj_t[["x"]], adj_t[["y"]], adj_t[["z"]], det_rad)
-            start_b <- elongate_line(ortho_b, 0, adj_b[["x"]], adj_b[["y"]], adj_b[["z"]], det_rad)
-            
-            add_for_start_t <- -elgt
-            add_for_start_b <- elgt
-          }
-           
-        }
-        
-        ## define elongation lengths
-        
-        if(v!=length(rel_vecs)){
-          
-          nextVEC <- rel_vecs[[v+1]]
-          elgt_end <- abs(det_rad*tan(deg2rad(0.5*abs((VEC[["ha"]]-90)-(nextVEC[["ha"]]-90)))))
-
-          if(nextVEC[["ha"]]>VEC[["ha"]]){
-            len_b <- VEC[["l"]]+elgt_end+add_for_start_b
-            len_t <- VEC[["l"]]-elgt_end+add_for_start_t
-          } else {
-            len_b <- VEC[["l"]]-elgt_end+add_for_start_b
-            len_t <- VEC[["l"]]+elgt_end+add_for_start_t
-          }
-        } else {
-          
-          len_b <- VEC[["l"]]+add_for_start_b
-          len_t <- VEC[["l"]]+add_for_start_t
-          
-          #### performing circular screen at end of main dendrite:
-          
-          df_circ_end <- screen_circular(det_rad, z_range,
-                                         VEC[["xe"]], VEC[["ye"]], VEC[["ze"]], VEC[["ha"]])
-          
-          
-        }
-        
-
-        
-        if(len_t>0){
-          df_top <- screen_subdendrite_starts(start_t, rel_z_layer, det_rad, round(len_t), VEC)
-        } else {
-          df_top <- NULL
-        }
-        if(len_b>0){
-          df_bottom <- screen_subdendrite_starts(start_b, rel_z_layer, det_rad, round(len_b), VEC)
-        } else {
-          df_top <- NULL
-        }
-        
-        df_combined <- list(df_top, df_bottom, df_circ_end) %>%
-          compact() %>%
-          bind_rows() %>%
-        return()
-        
-      }) %>% bind_rows()  
-      
+      all_sorrounding_vox <- define_surr_layer(rel_vecs, full_vecs, det_rad, z_range)
       
       ##QC
       
@@ -245,61 +145,17 @@ results <- lapply(files, function(file){
       # p
       # dev.off()
       
-
+      df_centers <- find_subd_cluster(all_sorrounding_vox)
       
-      df_centers <- sss2(all_sorrounding_vox)
-       
-      full_dendrite <- bind_rows(full_vecs) %>% mutate_all(.funs = as.numeric)
-       
-        #SUBD <- df_centers[1,]
+      rescored_subdendrites <- apply(df_centers, 1, fit_path_to_subd_cluster) %>% 
+        compact() %>% 
+        bind_rows()
         
-        #cat(paste("\n  fitting", nrow(df_centers), "subdendrites"))
-        rescored_subdendrites <- apply(df_centers, 1, function(SUBD){
-          #cat(paste("\ncluster:",SUBD[["id"]]))
-          
-          df_dist_raw <- full_dendrite %>%
-            rowwise() %>%
-            mutate(dist=dist_pts(x,y,z,as.numeric(SUBD[["x"]]),as.numeric(SUBD[["y"]]),as.numeric(SUBD[["z"]])),
-                   ha=get_ha(x,y,as.numeric(SUBD[["x"]]),as.numeric(SUBD[["y"]])),
-                   va=get_va(dist, z, as.numeric(SUBD[["z"]]))) %>%
-            filter(dist<=4*det_rad) #%>%
-          if(nrow(df_dist_raw)==0){return(NULL)}
-          
-          df_dist <- df_dist_raw %>%
-            mutate(score=fit_subdendrite(SUBD, dist, ha, va)) %>%
-            filter(score!=0)
-            
-          if(nrow(df_dist)==0){return(NULL)}
-          
-          final_intersection <- df_dist[which(df_dist$score==max(df_dist$score)),] %>%
-            .[which(.$dist==min(.$dist)),] %>%
-            mutate(dist_to_soma=dist_pts(x,y,z,SOMA[["x"]],SOMA[["y"]],SOMA[["z"]]),
-                   x_el=SUBD[["x"]],
-                   y_el=SUBD[["y"]],
-                   z_el=SUBD[["z"]],) 
-          
-          return(final_intersection)
-          
-        }) %>% compact() %>% bind_rows()
-        
-        
-        
-        if(nrow(rescored_subdendrites)==0){return(NULL)}
         return(rescored_subdendrites)
         
-      })
-      
     })
-    
-    
-    
-    # all_sbd <- all_subdendrites %>% compact() %>%
-    #   bind_rows()
-    
-    # all_sbd <- all_subdendrites %>% compact() %>%
-    #   lapply(function(x){
-    #     arrange(x, dist_to_soma)
-    #   }) %>% bind_rows()
+      
+
     
     
     all_sbd <- rescored_subdendrites %>%
