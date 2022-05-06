@@ -1194,12 +1194,15 @@ screen_subdendrite_starts <- function(start, rel_z_layer, det_rad, elgt_len, VEC
                                start[["x"]], start[["y"]], ZS, elgt_len)
     
   }) %>% bind_rows() %>% rowwise() %>%
-    mutate(dist=dist_pts(x, y, z, round(SOMA[["x"]]), round(SOMA[["y"]]), round(SOMA[["z"]])))
+    mutate(dist=dist_pts(x, y, z, round(SOMA[["x"]]), round(SOMA[["y"]]), round(SOMA[["z"]]))) %>%
+    select(x,y,z,i,dist)
   
 
   
   return(df)
 }
+
+#df <- bind_rows(df_comb_b, df_comb_t)
 
 sss2 <- function(df){
 
@@ -1220,14 +1223,83 @@ sss2 <- function(df){
   
   df_centers <- lapply(unique(df_clustered$c), function(CLUST){
     
-    kmeans(df_clustered %>% filter(c==CLUST) %>% select(x,z), centers=1)$centers %>%
+    kmeans(df_clustered %>% filter(c==CLUST) %>% select(x,y,z), centers=1)$centers %>%
       round() %>%
-      set_names(nm=c("x", "z"))
+      set_names(nm=c("x","y","z"))
     
   }) %>% bind_rows() %>%
-    left_join(df, by=c("x"="x", "z"="z"))
+    left_join(df, by=c("x"="x","y"="y", "z"="z"))
   
   return(df_centers)
   
 }
+#  X <- VEC[["xe"]]
+#  Y <- VEC[["ye"]]
+# Z <- VEC[["ze"]]
+# ha <- VEC[["ha"]]
+screen_circular <- function(det_rad, z_range, X, Y, Z, ha){
+ 
+  
+  borders <- c(b1=cos(0.5*deg2rad(ha-90)), b2=cos(0.5*deg2rad(ha+90)))
+  b1 <- min(borders)
+  b2 <- max(borders)
+
+    
+  rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
+    .[between(., 1, length(full_image))]
+  
+  lapply(rel_z_layer, function(ZS){
+    
+    df_circ_x <- tibble(x=seq(-det_rad, det_rad, 1)) %>%
+      mutate(yp=sqrt(det_rad^2-x^2),
+             yn=-sqrt(det_rad^2-x^2)) %>%
+      gather(dir, y, -x)
+    
+    df_circ_y <- tibble(y=seq(-det_rad, det_rad, 1)) %>%
+      mutate(xp=sqrt(det_rad^2-y^2),
+             xn=-sqrt(det_rad^2-y^2)) %>%
+      gather(dir, x, -y)
+  
+    df_circ <- bind_rows(df_circ_x, df_circ_y) %>%
+      mutate_at(.vars = c("x", "y"), .funs = round) %>%
+      mutate(id=paste(x, y, sep="_")) %>%
+      filter(!duplicated(id)) %>%
+      mutate(xa=x+X,
+             ya=y+Y,
+             angle=rad2deg(atan((y/det_rad)/(x/det_rad))),
+             af=case_when(
+               x<0 ~ angle+180,
+               angle<0~ angle+360,
+               TRUE ~ angle
+             ), 
+             cs=cos(0.5*deg2rad(af))) %>%
+      filter(between(cs, b1, b2)) %>% 
+      rowwise() %>%
+      mutate(i=select_intensity(xa, ya, ZS, binary_image),
+             z=ZS) %>%
+      
+      select(x=xa, y=ya, z, i) %>%
+      mutate(dist=dist_pts(x, y, z, round(SOMA[["x"]]), round(SOMA[["y"]]), round(SOMA[["z"]]))) %>%
+      return()
+    # 
+    # ggplot(df_circ, aes(x=x, y=y, color=cs))+geom_point()+
+    #   scale_color_gradientn(#breaks=c(0, 90, 180, 270,360), 
+    #                         colors = c("green" ,"red", "blue", "black"))
+        
+  }) %>%
+    compact() %>%
+    bind_rows() %>%
+    return()
+  
+}
+                
+
+
+
+
+
+
+
+
+
 
