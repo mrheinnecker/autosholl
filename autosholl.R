@@ -123,7 +123,7 @@ results <- lapply(files, function(file){
     
     n <- 2
     
-    subd_starts_all_maind <- lapply(1:n_main_dendrites, function(n){
+    MASTER <- lapply(1:n_main_dendrites, function(n){
     
       cat(paste("\nmain dendrite:", n))
         
@@ -195,14 +195,21 @@ results <- lapply(files, function(file){
           mutate(class="dend",
                  sub_id=NA)
         
+        sub_dend_full <- bind_rows(select(node, x=xs,y=ys,z=zs),
+                    select(node, x=xe,y=ye,z=ze))
+        
+        
+        full_subdend_info <- list(sub_dend, sub_dend_full)
         
         if(idNODE==nrow(df_sorted)){
           ## no know subnodes so far ... just elongation directions
-          sub_node <- NULL
-          full_vec_pos <- NULL
+          #sub_node <- NULL
+          subnode_id <- NULL
+          #full_vec_pos <- NULL
+          full_subnode_info <- NULL
         } else {
           next_node <- df_sorted %>% filter(node==idNODE+1)
-          
+          subnode_id <- next_node$node
           sub_node <- next_node %>%
             select(x=xs, y=ys, z=zs, sub_id=node) %>%
             rowwise() %>%
@@ -227,14 +234,17 @@ results <- lapply(files, function(file){
             
           }
           
+          full_subnode_info <- list(sub_node, full_vec_pos)
+          
         }
         
 
         final_list <- list(node_id=node$node,
                            master_id=idNODE-1,
+                           subnodes=list(subnode_id) %>% compact(),
                            pos=node %>% select(x=xs, y=ys, z=zs),
-                           sub=list(list(sub_node, full_vec_pos) %>% compact(), 
-                                    list(sub_dend, NULL)) %>% compact()
+                           subnode_full=list(full_subnode_info) %>% compact(),
+                           subdend_full=list(full_subdend_info)
                            )
         return(final_list)
           

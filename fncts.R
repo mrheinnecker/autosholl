@@ -1562,6 +1562,79 @@ trace_dendrite <- function(SUBD, headnode, det_rad, z_range){
 
 
 
+export_structure <- function(MASTER){
+  
+  lapply(MASTER, function(MAIND){   ## main dendrites
+    
+    assigned <- list()
+    node_id <- 1
+    ids_to_go_next <- list()
+    ids_to_return <- list()
+    abort <- F
+    finished <- list()
+    
+    c <- 1
+    
+    while(abort==F){
+      print(c)
+      ids_to_go_next <- ids_to_go_next[which(!ids_to_go_next==node_id)]
+      next_nodes_raw <- MAIND[[which(unlist(lapply(MAIND, function(x){x$node_id==node_id})))]]$subnodes
+      next_nodes <- next_nodes_raw[which(!next_nodes_raw %in% finished)]
+      
+      if(length(next_nodes)==0){
+        ## end of node chain
+        if(length(ids_to_go_next)==0){
+          abort=T
+        } else {
+          assigned <- append(assigned, list(tibble(x=node_id, y=first(ids_to_return))))
+          finished <- append(finished, node_id)
+          node_id <- first(ids_to_return)
+          ids_to_return[[1]] <- NULL
+          ids_to_return <- compact(ids_to_return)
+        }
+      } else if(length(next_nodes)==1){
+        ## only one subnode
+        if(length(ids_to_return)>0){
+          ids_to_return <- append(node_id, ids_to_return) %>% unique()
+        }
+        assigned <- append(assigned, list(tibble(x=node_id, y=next_nodes[[1]])))
+        finished <- append(finished, node_id) %>% unique()
+        node_id <- next_nodes[[1]]
+      } else {
+        if(length(ids_to_return)>0){
+          ids_to_return <- append(node_id, ids_to_return) %>% unique()
+        }
+        ## more than one subnode
+        if(length(ids_to_go_next)==0){
+          ## no subdendrites left to go
+          assigned <- append(assigned, list(tibble(x=node_id, y=next_nodes[[1]])))
+          ids_to_return <- append(ids_to_return, node_id)
+          node_id <- next_nodes[[1]]
+          ids_to_go_next <- append(ids_to_go_next, next_nodes[c(2:length(next_nodes))])
+        } else {
+          ## still subdendrites left
+          if(length(ids_to_return)==0){
+            assigned <- append(assigned, list(tibble(x=node_id, y=first(ids_to_go_next))))
+            ids_to_return <- append(ids_to_return, node_id)
+            node_id <- first(ids_to_go_next)
+            ids_to_go_next[[1]] <- NULL
+            ids_to_go_next <- compact(ids_to_go_next)
+          } else {
+            assigned <- append(assigned, list(tibble(x=node_id, y=next_nodes[[1]])))
+            ids_to_return <- append(node_id, ids_to_return)
+            node_id <- next_nodes[[1]]
+            ids_to_go_next <- append(ids_to_go_next, next_nodes[c(2:length(next_nodes))])
+          }
+        }
+      }
+      c <- c+1
+    }
+    
+  })
+}  
+
+
+
 
 
 
