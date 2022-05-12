@@ -1081,8 +1081,7 @@ dist_pts <- function(x1, y1, z1, x2, y2, z2){
   
 }
 get_va <- function(dist, z2, z1){
-  
-  angle <- rad2deg(atan((abs(z1-z2))/dist))
+  angle <- rad2deg(asin((abs(z1-z2))/dist))
   if(z2>=z1){
     fin <- 0-angle
   } else {
@@ -1092,9 +1091,7 @@ get_va <- function(dist, z2, z1){
 }
 
 get_ha <- function(x2,y2,x1,y1){
-  
   angle <- rad2deg(atan((abs(x1-x2))/abs(y1-y2)))
-  
   if(x1>=x2&y1>=y2){
     fin <- 270-angle
   } else if(x1>=x2&y1<=y2){
@@ -1104,8 +1101,6 @@ get_ha <- function(x2,y2,x1,y1){
   } else if(x1<=x2&y1<=y2){
     fin <- 90-angle
   } 
-  
-  
   return(fin)
 }
 
@@ -1146,31 +1141,51 @@ fit_subdendrite_new <- function(SUBD, dist, ha, va){
 
 define_full_vector_info <- function(ELD){
   
-  #ELD <- elongated_dendrites[[nD]]
+  #ELD <- elongated_dendrites[[2]]
   
   all_vecs <- lapply(1:length(ELD), function(n){
     if(n==length(ELD)){
       return(NULL)
     } else {
       
-      l <- sqrt(
-        
-        (ELD[[n]][["x"]]-ELD[[n+1]][["x"]])^2+
-          (ELD[[n]][["y"]]-ELD[[n+1]][["y"]])^2+
-          (ELD[[n]][["z"]]-ELD[[n+1]][["z"]])^2
-      )
+      xs=ELD[[n]][["x"]]
+      ys=ELD[[n]][["y"]]
+      zs=ELD[[n]][["z"]]
+      xe=ELD[[n+1]][["x"]]
+      ye=ELD[[n+1]][["y"]]
+      ze=ELD[[n+1]][["z"]]
+      
+      
+      ## length of vector
+      l <- sqrt((xs-xe)^2 + (ys-ye)^2 + (zs-ze)^2)
+      
+      
+      ## check if vector diverges from soma
+      dist_start_soma=dist_pts(xs, ys, zs, 
+                            round(SOMA[["x"]]), 
+                            round(SOMA[["y"]]), 
+                            round(SOMA[["z"]]))
+      dist_end_soma=dist_pts(xe, ye, ze, 
+                               round(SOMA[["x"]]), 
+                               round(SOMA[["y"]]), 
+                               round(SOMA[["z"]]))
+      
+      direction <- ifelse(dist_start_soma<dist_end_soma,
+                          1, -1)
       
       c(
         
-        xs=ELD[[n]][["x"]],
-        ys=ELD[[n]][["y"]],
-        zs=ELD[[n]][["z"]],
-        xe=ELD[[n+1]][["x"]],
-        ye=ELD[[n+1]][["y"]],
-        ze=ELD[[n+1]][["z"]],
+        xs=xs,
+        ys=ys,
+        zs=zs,
+        xe=xe,
+        ye=ye,
+        ze=ze,
         ha=ELD[[n+1]][["h_angle"]],
         va=ELD[[n+1]][["v_angle"]],
-        l=l
+        l=l,
+        level=n,
+        dir=direction
       ) %>% return()
     } 
   }) %>% compact() #%>% 
@@ -1178,7 +1193,8 @@ define_full_vector_info <- function(ELD){
     
   full_voxels <- lapply(all_vecs, function(VEC){
     elongate_3d_sphere(full_image, VEC[["ha"]], VEC[["va"]], VEC[["xs"]], VEC[["ys"]], VEC[["zs"]], round(VEC[["l"]]))%>% 
-    select(x,y,z)
+    select(x,y,z) %>%
+      mutate(level=VEC[["level"]])
   }) 
   
   return(list(all_vecs, full_voxels))
@@ -1187,29 +1203,27 @@ define_full_vector_info <- function(ELD){
 #start <- start_b
 #elgt_len <- round(len_b)
 screen_subdendrite_starts <- function(start, rel_z_layer, det_rad, elgt_len, VEC){
-  
   df <- lapply(rel_z_layer, function(ZS){
-    #print(ZS)
     line <- elongate_3d_sphere(binary_image, VEC[["ha"]], VEC[["va"]], 
                                start[["x"]], start[["y"]], ZS, elgt_len)
-    
-  }) %>% bind_rows() %>% rowwise() %>%
-    mutate(dist=dist_pts(x, y, z, round(SOMA[["x"]]), round(SOMA[["y"]]), round(SOMA[["z"]]))) %>%
-    select(x,y,z,i,dist)
-  
-
-  
+  }) %>% 
+    bind_rows() %>% 
+    rowwise() %>%
+    mutate(dist_to_soma=dist_pts(x, y, z, 
+                         round(SOMA[["x"]]), 
+                         round(SOMA[["y"]]), 
+                         round(SOMA[["z"]]))) %>%
+    select(x,y,z,i,dist_to_soma)
   return(df)
 }
 
 #df <- bind_rows(df_comb_b, df_comb_t)
 
 find_subd_cluster <- function(df){
-
-  #
-    df_filtered <- df %>% 
+  df_filtered <- df %>% 
     filter(i!=0,
-           dist>2.5*soma_radius) %>%
+           #dist>2.5*soma_radius
+           ) %>%
     select(x,y,z)
   if(nrow(df_filtered)==0){return(NULL)} 
   df_clustered <- df_filtered %>% 
@@ -1218,31 +1232,42 @@ find_subd_cluster <- function(df){
     filter(c!=0)
   
   if(nrow(df_clustered)==0){return(NULL)}
-  
   #ggplot(df_clustered %>% filter(c!=0), aes(x=x, y=z, color=as.character(c)))+ geom_point()
-  
   df_centers <- lapply(unique(df_clustered$c), function(CLUST){
-    
     kmeans(df_clustered %>% filter(c==CLUST) %>% select(x,y,z), centers=1)$centers %>%
       round() %>%
       set_names(nm=c("x","y","z"))
-    
-  }) %>% bind_rows() %>%
-    left_join(df, by=c("x"="x","y"="y", "z"="z"))
-  
+  }) #%>% bind_rows() #%>%
+    #left_join(df, by=c("x"="x","y"="y", "z"="z"))
   return(df_centers)
-  
 }
-#  X <- VEC[["xe"]]
-#  Y <- VEC[["ye"]]
+
+adj_deg <- function(GRAD){
+  if(GRAD>360){
+    return(GRAD-360)
+  } else if(GRAD<0){
+    return(GRAD+360)
+  } else {
+    return(GRAD)
+  }
+}
+
+# X <- VEC[["xe"]]
+# Y <- VEC[["ye"]]
 # Z <- VEC[["ze"]]
 # ha <- VEC[["ha"]]
+# X <- SUBD[["x_el"]]
+# Y <- SUBD[["y_el"]]
+# Z <- SUBD[["z_el"]]
+# ha <- SUBD[["ha"]]
+# ha <- 290
+## es geht nur ha zwischen 90 und 270
+
 screen_circular <- function(det_rad, z_range, X, Y, Z, ha){
  
   
-  borders <- c(b1=cos(0.5*deg2rad(ha-90)), b2=cos(0.5*deg2rad(ha+90)))
-  b1 <- min(borders)
-  b2 <- max(borders)
+  bmin=ha-90
+  bmax=ha+90
 
     
   rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
@@ -1260,7 +1285,7 @@ screen_circular <- function(det_rad, z_range, X, Y, Z, ha){
              xn=-sqrt(det_rad^2-y^2)) %>%
       gather(dir, x, -y)
   
-    df_circ <- bind_rows(df_circ_x, df_circ_y) %>%
+    df_circ_full <- bind_rows(df_circ_x, df_circ_y) %>%
       mutate_at(.vars = c("x", "y"), .funs = round) %>%
       mutate(id=paste(x, y, sep="_")) %>%
       filter(!duplicated(id)) %>%
@@ -1272,16 +1297,35 @@ screen_circular <- function(det_rad, z_range, X, Y, Z, ha){
                angle<0~ angle+360,
                TRUE ~ angle
              ), 
-             cs=cos(0.5*deg2rad(af))) %>%
-      filter(between(cs, b1, b2)) %>% 
+             #cs=cos(0.5*deg2rad(af))
+             ) #%>%
+    
+    if(between(bmin, 0, 360)&between(bmax, 0, 360)){
+    
+      df_circ <- df_circ_full %>%
+        filter(between(af, bmin, bmax)) 
+
+    } else if(bmin<0){
+      
+      df_circ <- df_circ_full %>%
+        filter(between(af, bmin+360, 360)|between(af, 0, bmax))
+      
+    } else {
+      
+      df_circ <- df_circ_full %>%
+        filter(between(af, bmin, 360)|between(af, 0, bmax-360))
+      
+    }
+    
+    
+    df_circ %>%     
       rowwise() %>%
       mutate(i=select_intensity(xa, ya, ZS, binary_image),
              z=ZS) %>%
       
       select(x=xa, y=ya, z, i) %>%
-      mutate(dist=dist_pts(x, y, z, round(SOMA[["x"]]), round(SOMA[["y"]]), round(SOMA[["z"]]))) %>%
+      mutate(dist_to_soma=dist_pts(x, y, z, round(SOMA[["x"]]), round(SOMA[["y"]]), round(SOMA[["z"]]))) %>%
       return()
-    # 
     # ggplot(df_circ, aes(x=x, y=y, color=cs))+geom_point()+
     #   scale_color_gradientn(#breaks=c(0, 90, 180, 270,360), 
     #                         colors = c("green" ,"red", "blue", "black"))
@@ -1295,7 +1339,6 @@ screen_circular <- function(det_rad, z_range, X, Y, Z, ha){
                 
 
 define_surr_layer <- function(rel_vecs, full_vecs, det_rad, z_range){
-  
   all_sorrounding_vox <- lapply(1:length(rel_vecs), function(v){ 
     cat(paste("\nvec:",v))
     
@@ -1379,7 +1422,7 @@ define_surr_layer <- function(rel_vecs, full_vecs, det_rad, z_range){
     if(len_b>0){
       df_bottom <- screen_subdendrite_starts(start_b, rel_z_layer, det_rad, round(len_b), VEC)
     } else {
-      df_top <- NULL
+      df_bottom <- NULL
     }
     
     df_combined <- list(df_top, df_bottom, df_circ_end) %>%
@@ -1393,8 +1436,8 @@ define_surr_layer <- function(rel_vecs, full_vecs, det_rad, z_range){
 }
 
 
-
-fit_path_to_subd_cluster <- function(SUBD){
+#SUBD=bind_rows(df_centers)[1,]
+fit_path_to_subd_cluster <- function(SUBD, full_dendrite, det_rad){
   #cat(paste("\ncluster:",SUBD[["id"]]))
   
   df_dist_raw <- full_dendrite %>%
@@ -1403,6 +1446,7 @@ fit_path_to_subd_cluster <- function(SUBD){
            ha=get_ha(x,y,as.numeric(SUBD[["x"]]),as.numeric(SUBD[["y"]])),
            va=get_va(dist, z, as.numeric(SUBD[["z"]]))) %>%
     filter(dist<=4*det_rad) #%>%
+  
   if(nrow(df_dist_raw)==0){return(NULL)}
   
   df_dist <- df_dist_raw %>%
@@ -1411,16 +1455,112 @@ fit_path_to_subd_cluster <- function(SUBD){
   
   if(nrow(df_dist)==0){return(NULL)}
   
-  final_intersection <- df_dist[which(df_dist$score==max(df_dist$score)),] %>%
-    .[which(.$dist==min(.$dist)),] %>%
-    mutate(dist_to_soma=dist_pts(x,y,z,SOMA[["x"]],SOMA[["y"]],SOMA[["z"]]),
-           x_el=SUBD[["x"]],
-           y_el=SUBD[["y"]],
-           z_el=SUBD[["z"]],) 
+  # final_intersection <- df_dist[which(df_dist$score==max(df_dist$score)),] %>%
+  #   .[which(.$dist==min(.$dist)),] %>%
+  #   mutate(dist_to_soma=dist_pts(x,y,z,SOMA[["x"]],SOMA[["y"]],SOMA[["z"]]),
+  #          x_el=SUBD[["x"]],
+  #          y_el=SUBD[["y"]],
+  #          z_el=SUBD[["z"]],) 
   
-  return(final_intersection)
+  
+  
+  final_intersection <- df_dist[which(df_dist$score==max(df_dist$score)),] %>%
+    .[which(.$dist==min(.$dist)),]
+  
+  subd_start <- final_intersection %>% select(xs=x,ys=y,zs=z, level, ha, va) %>%
+                             mutate(xe=SUBD[["x"]],
+                                        ye=SUBD[["y"]],
+                                        ze=SUBD[["z"]])
+  
+  return(subd_start)
   
 }
+
+
+
+show_surrounding_layer <- function(all_sorrounding_vox, filename){
+  p <- ggplot(all_sorrounding_vox %>% group_by(x,y) %>% summarize(z=max(z)),
+              aes(x=x, y=y, color=z))+geom_point(size=0.5)+
+    geom_segment(data=bind_rows(main_vectors[[n]]),
+                 aes(x=xs, y=ys, xend=xe, yend=ye))
+
+
+  pdf(file=filename, width=50, height=10)
+  p
+  dev.off()
+}
+
+
+
+
+
+
+trace_dendrite <- function(SUBD, headnode, det_rad, z_range){
+  
+  #print(111)
+  #print(as_tibble(SUBD)) 
+  segment_list <- list()
+  #df_centers <- tibble(x=SUBD[["x"]], y=SUBD[["y"]], z=SUBD[["z"]])
+  df_centers <- SUBD %>% select(x,y,z)
+  vec_angle <- adj_deg(SUBD$ha+180)
+  c <- 1
+  branch_count <- 1
+  segment_list[[c]] <- df_centers
+  #while(!is.null(df_centers)){
+  while(branch_count>0){  
+    
+    cat(paste("\n    elgt step:", c))
+    
+    df_circ_end <- screen_circular(det_rad, z_range,
+                                   df_centers[["x"]], df_centers[["y"]], df_centers[["z"]], 
+                                   vec_angle)
+    
+    centers <- find_subd_cluster(df_circ_end)
+    
+    if(is.null(centers)){
+      ## subdendrite finished
+      branch_count <- branch_count-1
+      final_vec <- tibble(x=SUBD[["x"]],y=SUBD[["y"]],z=SUBD[["z"]])  %>%
+        bind_cols(df_centers %>% select(xe=x, ye=y, ze=z))
+      
+      ret <- list(sub=F, vec=bind_rows(segment_list))
+      
+    } else if(length(centers)==1){
+      ## subdendrite elonagtes
+      
+      df_centers <- bind_rows(centers)
+      vec_angle <- get_ha(df_centers$x, df_centers$y, segment_list[[c]]$x, segment_list[[c]]$y) 
+      
+      #segment_list[[c]] <- append(segment_list[[c]], list(sub=NULL))
+      
+      c <- c+1
+      
+      segment_list[[c]] <- df_centers
+    } else {
+      ## new intersection
+      branch_count <- branch_count-1
+      #final_vec <- SUBD
+      
+      ## calc angles to new subdendrites 
+      proc_cent <- lapply(centers, function(C){
+        na <- get_ha(C[["x"]], C[["y"]], segment_list[[c]]$x, segment_list[[c]]$y)
+        return(tibble(x=C[["x"]], y=C[["y"]], z=C[["z"]], ha=na))
+      })
+      
+      ret <- list(sub=T, vec=bind_rows(segment_list), 
+                  pos=SUBD, 
+                  end=proc_cent)
+    }
+    
+    
+  }
+  
+  return(ret)
+  
+}
+
+
+
 
 
 

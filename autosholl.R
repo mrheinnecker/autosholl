@@ -33,7 +33,12 @@ results <- lapply(files, function(file){
   print("soma detected")
   SOMA <- somata[1,]
   
-  apply(somata,1, function(SOMA){
+##  apply(somata,1, function(SOMA){
+    ## for each soma a list of all branches and knots is created at this point:
+    # full_branches <- list(pos=tibble(x=round(SOMA[["x"]]),
+    #                                  y=round(SOMA[["y"]]),
+    #                                  z=round(SOMA[["z"]])))
+    
     ## check soma for dendritic start sites
     main_dendrites_raw <- find_dendritic_start_sites(SOMA) 
     main_dendrites <- main_dendrites_raw[[1]] %>%
@@ -75,7 +80,7 @@ results <- lapply(files, function(file){
                         steps)
     })
     ## check in fiji:
-    export_dendrites(elongated_dendrites, "f:/data_sholl_analysis/test/example_data/dendrites.csv")
+    #export_dendrites(elongated_dendrites, "f:/data_sholl_analysis/test/example_data/dendrites.csv")
     
     borders_vox_raw <- lapply(1:n_main_dendrites, function(n){
       
@@ -114,12 +119,14 @@ results <- lapply(files, function(file){
     main_vectors_raw <- lapply(elongated_dendrites, define_full_vector_info)
     main_vectors <- lapply(main_vectors_raw, nth, 1)
     main_vectors_full=lapply(main_vectors_raw, nth, 2)
-    
+    main_vectors_df <- lapply(main_vectors, bind_rows)
     
     n <- 2
     
     subd_starts_all_maind <- lapply(1:n_main_dendrites, function(n){
-      
+    
+      cat(paste("\nmain dendrite:", n))
+        
       det_rad <- 30
       z_range <- 10
       
@@ -129,36 +136,196 @@ results <- lapply(files, function(file){
       rel_vecs <- rel_vecs_raw[c(2:length(rel_vecs_raw))]
       full_vecs <- full_vecs_raw[c(2:length(full_vecs_raw))]
       
-      full_dendrite <- bind_rows(full_vecs) %>% mutate_all(.funs = as.numeric)
+      full_dendrite <- bind_rows(full_vecs) %>% 
+        mutate_all(.funs = as.numeric)
       
-      all_sorrounding_vox <- define_surr_layer(rel_vecs, full_vecs, det_rad, z_range)
+      all_sorrounding_vox <- define_surr_layer(rel_vecs, full_vecs, det_rad, z_range) %>%
+        filter(dist_to_soma>2.5*soma_radius)
       
-      ##QC
+      #print(1)
       
-      # p <- ggplot(all_sorrounding_vox %>% group_by(x,y) %>% summarize(z=max(z)),
-      #             aes(x=x, y=y, color=z))+geom_point(size=0.5)+
-      #   geom_segment(data=bind_rows(main_vectors[[n]]),
-      #                aes(x=xs, y=ys, xend=xe, yend=ye))
-      # 
-      # 
-      # pdf(file="f:/data_sholl_analysis/test/full_sorrounding.pdf", width=50, height=10)
-      # p
-      # dev.off()
-      
+      #show_surrounding_layer(all_sorrounding_vox, "f:/data_sholl_analysis/test/full_sorrounding.pdf")
+
       df_centers <- find_subd_cluster(all_sorrounding_vox)
       
-      rescored_subdendrites <- apply(df_centers, 1, fit_path_to_subd_cluster) %>% 
-        compact() %>% 
-        bind_rows()
+      #print(2)
+      ## if no subdendrite starts are found... the main dendrite is just a subdendrite
+      if(is.null(df_centers)){
+        #full_branches
+        return(NULL)
+      }
+      rescored_subdendrites <- apply(bind_rows(df_centers), 1, fit_path_to_subd_cluster, 
+                                     full_dendrite=full_dendrite,
+                                     det_rad=det_rad) %>% 
+        compact() #%>% 
+        #bind_rows()
         
-        return(rescored_subdendrites)
+      ## get hierarchy
+      
+      df_poslev <- rescored_subdendrites %>%
+        bind_rows() %>%
+        rowwise() %>%
+        mutate(dist_to_soma=dist_pts(xs,ys,zs, round(SOMA[["x"]]),round(SOMA[["y"]]),round(SOMA[["z"]]))) %>%
+        left_join(bind_rows(main_vectors[[n]]) %>% select(level, dir), by="level")
+      
+      
+      df_sorted <- lapply(unique(df_poslev$level), function(LEV){
+        rel_rows <- df_poslev %>%
+          filter(level==LEV)
+        
+        if(unique(rel_rows$dir)==1){
+          return(arrange(rel_rows, dist_to_soma))
+        } else {
+          return(arrange(rel_rows, desc(dist_to_soma)))
+        }
+        
+      }) %>% bind_rows() %>% ungroup() %>%
+        mutate(node=c(1:nrow(.)))
+      
+      
+      #idNODE <- 12
+      assigned_nodes <- lapply(df_sorted$node, function(idNODE){
+        
+        node <- df_sorted %>%
+          filter(node==idNODE)
+        
+        #master_node <- idNODE-1
+        
+        sub_dend <- node %>% select(x=xe, y=ye, z=ze, ha, va)  %>%
+          mutate(class="dend",
+                 sub_id=NA)
+        
+        
+        if(idNODE==nrow(df_sorted)){
+          ## no know subnodes so far ... just elongation directions
+          sub_node <- NULL
+          full_vec_pos <- NULL
+        } else {
+          next_node <- df_sorted %>% filter(node==idNODE+1)
+          
+          sub_node <- next_node %>%
+            select(x=xs, y=ys, z=zs, sub_id=node) %>%
+            rowwise() %>%
+            mutate(ha=get_ha(x,y,node$xs, node$ys),
+                   dist=dist_pts(x,y,z,node$xs, node$ys, node$zs),
+                   va=get_va(dist, z, node$zs),
+                   class="node") %>%
+            select(-dist)
+          
+          if(next_node$level!=node$level){
+            ## vector edges need to be inserted
+            full_vec_pos <- main_vectors_df[[n]] %>% #rowwise() %>%
+              filter(between(level, node$level, as.numeric(next_node$level-1))) %>%
+              select(x=xe, y=ye, z=ze) %>%
+              bind_rows(select(node, x=xs, y=ys, z=zs),
+                        .,
+                        select(next_node, x=xs, y=ys, z=zs))
+          } else {
+            
+            full_vec_pos <- bind_rows(select(node, x=xs, y=ys, z=zs),
+                                      select(next_node, x=xs, y=ys, z=zs))
+            
+          }
+          
+        }
+        
+
+        final_list <- list(node_id=node$node,
+                           master_id=idNODE-1,
+                           pos=node %>% select(x=xs, y=ys, z=zs),
+                           sub=list(list(sub_node, full_vec_pos) %>% compact(), 
+                                    list(sub_dend, NULL)) %>% compact()
+                           )
+        return(final_list)
+          
+        
+      })
+      
+        return(assigned_nodes)
         
     })
       
+    
+    
+    
+    
+    n <- 2
+    
+    elongated_subdendrites_maind <- lapply(1:n_main_dendrites, function(n){
+      
+      cat(paste("\nmain dendrite:", n))
+      
+      det_rad <- 10
+      z_range <- 5
+      
+      subd_list <- subd_starts_all_maind[[n]]
+      traced_subd_list <- list()
+      #SUBD <- subd_starts[3,]
+      nsd <- 0
+      while(nsd<length(subd_list)){
+        nsd <- nsd+1
+        cat(paste("\nsubd:", nsd, " of", length(subd_list)))
+        SUBD <- subd_list[[nsd]]
+        
+        node <- first(SUBD)
+        elongation_pt <- last(SUBD)
+        
+        nSUB <- 1
+        
+        for (nSUB in 1:length(elongation_pt)) {
+          
+          cat(paste("\n  trace:", nSUB, " of", length(elongation_pt)))
+          
+          traced <- trace_dendrite(elongation_pt[[nSUB]],
+                                   headnode=node, 
+                                   det_rad, 
+                                   z_range)
+          ## add elongated vector to current node of main list
+          subd_list[[nsd]][["end"]][[nSUB]] <- traced$vec
+          
+          
+          if(traced$sub){
+            ## further sub node detected --> add node to main list
+            subd_list <- append(subd_list, list(traced[c("pos", "end")]))
+            
+          } 
+          
+        }
+        
 
+        
+
+        
+      }
+      #trace_dendrite(SUBD)
+      
+      traced <- apply(subd_starts, 1, trace_dendrite) ## subdendrite
+      
+    }) ## main dendrite
+    
+##  }) # soma
+  
+}) # file     
     
     
-    all_sbd <- rescored_subdendrites %>%
+
+fiji_traced <- lapply(traced, last) %>%
+  lapply(function(IS){
+    tibble(x=c(IS[["x"]], IS[["xe"]], IS[["x"]]),
+           y=c(IS[["y"]], IS[["ye"]], IS[["y"]])) %>%
+      return()
+  }) %>%
+  bind_rows()%>%
+  mutate(id=factor(c(1:nrow(.)), levels=c(1:nrow(.))))
+
+
+
+write_csv(bind_rows(fiji_traced, arrange(fiji_traced, desc(id))) %>%
+            select(-id), 
+          file="f:/data_sholl_analysis/test/example_data/md4_traced_dr10.csv")    
+    
+    
+    all_sbd <- subd_starts %>%
       arrange(dist_to_soma)
     
     ## export dendrites for Fiji check
@@ -174,12 +341,10 @@ results <- lapply(files, function(file){
           select(-id)
         
         write_csv(t, 
-                  file="f:/data_sholl_analysis/test/example_data/subd_full_surr.csv")
+                  file="f:/data_sholl_analysis/test/example_data/subd_comp_full_surr.csv")
 
     
-  }) # soma
-
-}) # file  
+ 
 
 
     # 
