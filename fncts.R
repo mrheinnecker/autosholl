@@ -1560,11 +1560,18 @@ trace_dendrite <- function(SUBD, headnode, det_rad, z_range){
 }
 
 
+#MAIND_raw <- MASTER[[1]]
 
-
-export_structure <- function(MASTER){
+export_structure <- function(MASTER, output_file){
   
-  lapply(MASTER, function(MAIND){   ## main dendrites
+  node_order <- lapply(MASTER, function(MAIND_raw){   ## main dendrites
+    
+    if(is.null(MAIND_raw)){
+      ## no sub node from main dendrite --> export main dendrite vectors
+      return(NULL)
+    }
+    
+    MAIND <- lapply(MAIND_raw, function(fl){fl[c("node_id", "subnodes")]})
     
     assigned <- list()
     node_id <- 1
@@ -1586,7 +1593,7 @@ export_structure <- function(MASTER){
         if(length(ids_to_go_next)==0){
           abort=T
         } else {
-          assigned <- append(assigned, list(tibble(x=node_id, y=first(ids_to_return))))
+          assigned <- append(assigned, list(tibble(from=node_id, to=first(ids_to_return))))
           finished <- append(finished, node_id)
           node_id <- first(ids_to_return)
           ids_to_return[[1]] <- NULL
@@ -1597,7 +1604,7 @@ export_structure <- function(MASTER){
         if(length(ids_to_return)>0){
           ids_to_return <- append(node_id, ids_to_return) %>% unique()
         }
-        assigned <- append(assigned, list(tibble(x=node_id, y=next_nodes[[1]])))
+        assigned <- append(assigned, list(tibble(from=node_id, to=next_nodes[[1]])))
         finished <- append(finished, node_id) %>% unique()
         node_id <- next_nodes[[1]]
       } else {
@@ -1607,20 +1614,20 @@ export_structure <- function(MASTER){
         ## more than one subnode
         if(length(ids_to_go_next)==0){
           ## no subdendrites left to go
-          assigned <- append(assigned, list(tibble(x=node_id, y=next_nodes[[1]])))
+          assigned <- append(assigned, list(tibble(from=node_id, to=next_nodes[[1]])))
           ids_to_return <- append(ids_to_return, node_id)
           node_id <- next_nodes[[1]]
           ids_to_go_next <- append(ids_to_go_next, next_nodes[c(2:length(next_nodes))])
         } else {
           ## still subdendrites left
           if(length(ids_to_return)==0){
-            assigned <- append(assigned, list(tibble(x=node_id, y=first(ids_to_go_next))))
+            assigned <- append(assigned, list(tibble(from=node_id, to=first(ids_to_go_next))))
             ids_to_return <- append(ids_to_return, node_id)
             node_id <- first(ids_to_go_next)
             ids_to_go_next[[1]] <- NULL
             ids_to_go_next <- compact(ids_to_go_next)
           } else {
-            assigned <- append(assigned, list(tibble(x=node_id, y=next_nodes[[1]])))
+            assigned <- append(assigned, list(tibble(from=node_id, to=next_nodes[[1]])))
             ids_to_return <- append(node_id, ids_to_return)
             node_id <- next_nodes[[1]]
             ids_to_go_next <- append(ids_to_go_next, next_nodes[c(2:length(next_nodes))])
@@ -1629,8 +1636,72 @@ export_structure <- function(MASTER){
       }
       c <- c+1
     }
-    
+    return(assigned)
   })
+  
+  ## add vectors according to node order
+  
+  full_coords <- lapply(1:length(node_order), function(MD){
+    
+    order <- node_order[[MD]]
+    MAIND <- MASTER[[MD]]
+    
+    if(is.null(order)){
+      ## no subdenedrites --> use main dendrite
+      full_vec_list <- bind_rows(main_vectors[[MD]]) %>% select(x=xe, y=ye, z=ze) %>%
+        mutate(id=c(1:nrow(.)))
+    } else {
+      
+      full_vec_list <- lapply(order, function(WAY){
+        start_node <- MAIND[[which(unlist(lapply(MAIND, function(x){x$node_id==WAY$from})))]]
+        
+        start_full_subdendrites <- start_node[["subdend_full"]]
+        
+        ## add dendrites
+        subdend <- lapply(start_full_subdendrites, function(DEND){
+          
+          coords <- DEND[[2]] %>% ungroup() %>% mutate(id=c(1:nrow(.)))
+          
+          bind_rows(coords, arrange(coords, desc(id))) %>%
+            select(x,y,z) %>%
+            return()
+          
+        }) %>% bind_rows()
+        
+        
+        start_full_subnodes <- start_node[["subnode_full"]]
+        rel <- which(unlist(lapply(start_full_subnodes, function(x){x[[1]]==WAY$to})))
+        if(length(rel)==1){
+          return(bind_rows(subdend, start_full_subnodes[[rel]]$full_coords))
+        }
+        ## if at this point we havent found any subnode... we probably need to go to the master node
+        end_node <- MAIND[[which(unlist(lapply(MAIND, function(x){x$node_id==WAY$to})))]]
+        end_full_subnodes <- end_node[["subnode_full"]]
+        rel <- which(unlist(lapply(start_full_subnodes, function(x){x[[1]]==WAY$from})))
+        if(length(rel)==1){
+          return(bind_rows(subdend, end_full_subnodes[[rel]]$full_coords))
+        } else {
+          print("no match found???")
+        }
+      }) %>% bind_rows() %>%
+        mutate(id=c(1:nrow(.)))
+      
+    
+     
+      
+    }
+    full_maind <- bind_rows(full_vec_list, arrange(full_vec_list, desc(id))) %>%
+        select(-id, -z) %>%
+        bind_rows(select(SOMA, x,y), ., select(SOMA, x,y))
+    
+    
+  }) %>%
+    bind_rows()
+  
+  
+  write_csv(full_coords, file=output_file)
+  
+  
 }  
 
 

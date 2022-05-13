@@ -31,7 +31,7 @@ results <- lapply(files, function(file){
                        full_image)
   
   print("soma detected")
-  SOMA <- somata[1,]
+  SOMA <- somata[1,] %>% mutate_all(.funs = round) 
   
 ##  apply(somata,1, function(SOMA){
     ## for each soma a list of all branches and knots is created at this point:
@@ -234,7 +234,9 @@ results <- lapply(files, function(file){
             
           }
           
-          full_subnode_info <- list(sub_node, full_vec_pos)
+          full_subnode_info <- list(node_id=idNODE+1, 
+                                    info=sub_node, 
+                                    full_coords=full_vec_pos)
           
         }
         
@@ -257,7 +259,7 @@ results <- lapply(files, function(file){
       
     
     
-    
+    export_structure(MASTER, "f:/data_sholl_analysis/test/example_data/full_dendrites.csv")
     
     n <- 2
     
@@ -301,10 +303,6 @@ results <- lapply(files, function(file){
           } 
           
         }
-        
-
-        
-
         
       }
       #trace_dendrite(SUBD)
