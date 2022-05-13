@@ -1242,6 +1242,40 @@ find_subd_cluster <- function(df){
   return(df_centers)
 }
 
+
+
+find_subd_cluster_man <- function(df, EPS, MPTS){
+  df_filtered <- df %>% 
+    filter(i!=0,
+           #dist>2.5*soma_radius
+    ) %>%
+    select(x,y,z)
+  if(nrow(df_filtered)==0){return(NULL)} 
+  df_clustered <- df_filtered %>% 
+    ungroup() %>%
+    mutate(c=fpc::dbscan(df_filtered, eps = EPS, MinPts = MPTS)$cluster) %>%
+    filter(c!=0)
+  
+  if(nrow(df_clustered)==0){return(NULL)}
+  #ggplot(df_clustered %>% filter(c!=0), aes(x=x, y=z, color=as.character(c)))+ geom_point()
+  df_centers <- lapply(unique(df_clustered$c), function(CLUST){
+    kmeans(df_clustered %>% filter(c==CLUST) %>% select(x,y,z), centers=1)$centers %>%
+      round() %>%
+      set_names(nm=c("x","y","z"))
+  }) #%>% bind_rows() #%>%
+  #left_join(df, by=c("x"="x","y"="y", "z"="z"))
+  return(df_centers)
+}
+
+
+
+
+
+
+
+
+
+
 adj_deg <- function(GRAD){
   if(GRAD>360){
     return(GRAD-360)
@@ -1336,7 +1370,106 @@ screen_circular <- function(det_rad, z_range, X, Y, Z, ha){
     return()
   
 }
-                
+   
+
+
+screen_circular_new <- function(det_rad, z_range,inc, X, Y, Z, ha, ha_cutoff){
+  
+  
+  bmin=ha-90
+  bmax=ha+90
+  if(!is.null(ha_cutoff)){
+    if(ha<ha_cutoff){
+      if(bmax>ha_cutoff){
+        bmax <- round(ha_cutoff)
+      }
+      
+      if(bmin<ha_cutoff-180){
+        bmin <- round(ha_cutoff-180)
+      }
+    } else {
+      if(bmax>ha_cutoff+180){
+        bmax <- round(ha_cutoff+180)
+      }
+      
+      if(bmin<ha_cutoff){
+        bmin <- round(ha_cutoff)
+      }
+    }
+  }
+  
+  rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
+    .[between(., 1, length(full_image))]
+  
+  lapply(seq(det_rad-inc, det_rad+inc, 1), function(DET_RAD){
+    
+    lapply(rel_z_layer, function(ZS){
+      
+      df_circ_x <- tibble(x=seq(-DET_RAD, DET_RAD, 1)) %>%
+        mutate(yp=sqrt(DET_RAD^2-x^2),
+               yn=-sqrt(DET_RAD^2-x^2)) %>%
+        gather(dir, y, -x)
+      
+      df_circ_y <- tibble(y=seq(-DET_RAD, DET_RAD, 1)) %>%
+        mutate(xp=sqrt(DET_RAD^2-y^2),
+               xn=-sqrt(DET_RAD^2-y^2)) %>%
+        gather(dir, x, -y)
+      
+      df_circ_full <- bind_rows(df_circ_x, df_circ_y) %>%
+        mutate_at(.vars = c("x", "y"), .funs = round) %>%
+        mutate(id=paste(x, y, sep="_")) %>%
+        filter(!duplicated(id)) %>%
+        mutate(xa=x+X,
+               ya=y+Y,
+               angle=rad2deg(atan((y/DET_RAD)/(x/DET_RAD))),
+               af=case_when(
+                 x<0 ~ angle+180,
+                 angle<0~ angle+360,
+                 TRUE ~ angle
+               ), 
+               #cs=cos(0.5*deg2rad(af))
+        ) #%>%
+      
+      if(between(bmin, 0, 360)&between(bmax, 0, 360)){
+        
+        df_circ <- df_circ_full %>%
+          filter(between(af, bmin, bmax)) 
+        
+      } else if(bmin<0){
+        
+        df_circ <- df_circ_full %>%
+          filter(between(af, bmin+360, 360)|between(af, 0, bmax))
+        
+      } else {
+        
+        df_circ <- df_circ_full %>%
+          filter(between(af, bmin, 360)|between(af, 0, bmax-360))
+        
+      }
+      
+      
+      df_circ %>%     
+        rowwise() %>%
+        mutate(i=select_intensity(xa, ya, ZS, binary_image),
+               z=ZS) %>%
+        
+        select(x=xa, y=ya, z, i) %>%
+        mutate(dist_to_soma=dist_pts(x, y, z, round(SOMA[["x"]]), round(SOMA[["y"]]), round(SOMA[["z"]]))) %>%
+        return()
+      # ggplot(df_circ, aes(x=x, y=y, color=cs))+geom_point()+
+      #   scale_color_gradientn(#breaks=c(0, 90, 180, 270,360), 
+      #                         colors = c("green" ,"red", "blue", "black"))
+      
+    }) %>%
+      compact() %>%
+      bind_rows() %>%
+      return() 
+  }) %>% bind_rows() %>%
+    return()
+  
+}
+
+             
 
 define_surr_layer <- function(rel_vecs, full_vecs, det_rad, z_range){
   all_sorrounding_vox <- lapply(1:length(rel_vecs), function(v){ 
@@ -1705,7 +1838,139 @@ export_structure <- function(MASTER, output_file){
 }  
 
 
-
+find_subdendritic_starts <- function(n, main_vectors, main_vectors_full, SOMA){
+  
+  cat(paste("\nmain dendrite:", n))
+  
+  det_rad <- 30
+  z_range <- 10
+  
+  rel_vecs_raw <- main_vectors[[n]]
+  full_vecs_raw <- main_vectors_full[[n]]
+  
+  rel_vecs <- rel_vecs_raw[c(2:length(rel_vecs_raw))]
+  full_vecs <- full_vecs_raw[c(2:length(full_vecs_raw))]
+  
+  full_dendrite <- bind_rows(full_vecs) %>% 
+    mutate_all(.funs = as.numeric)
+  
+  all_sorrounding_vox <- define_surr_layer(rel_vecs, full_vecs, det_rad, z_range) %>%
+    filter(dist_to_soma>2.5*soma_radius)
+  
+  #print(1)
+  
+  #show_surrounding_layer(all_sorrounding_vox, "f:/data_sholl_analysis/test/full_sorrounding.pdf")
+  
+  df_centers <- find_subd_cluster(all_sorrounding_vox)
+  
+  #print(2)
+  ## if no subdendrite starts are found... the main dendrite is just a subdendrite
+  if(is.null(df_centers)){
+    #full_branches
+    return(NULL)
+  }
+  rescored_subdendrites <- apply(bind_rows(df_centers), 1, fit_path_to_subd_cluster, 
+                                 full_dendrite=full_dendrite,
+                                 det_rad=det_rad) %>% 
+    compact() #%>% 
+  #bind_rows()
+  
+  ## get hierarchy
+  
+  df_poslev <- rescored_subdendrites %>%
+    bind_rows() %>%
+    rowwise() %>%
+    mutate(dist_to_soma=dist_pts(xs,ys,zs, round(SOMA[["x"]]),round(SOMA[["y"]]),round(SOMA[["z"]]))) %>%
+    left_join(bind_rows(main_vectors[[n]]) %>% select(level, dir), by="level")
+  
+  
+  df_sorted <- lapply(unique(df_poslev$level), function(LEV){
+    rel_rows <- df_poslev %>%
+      filter(level==LEV)
+    
+    if(unique(rel_rows$dir)==1){
+      return(arrange(rel_rows, dist_to_soma))
+    } else {
+      return(arrange(rel_rows, desc(dist_to_soma)))
+    }
+    
+  }) %>% bind_rows() %>% ungroup() %>%
+    mutate(node=c(1:nrow(.)))
+  
+  
+  #idNODE <- 12
+  assigned_nodes <- lapply(df_sorted$node, function(idNODE){
+    
+    node <- df_sorted %>%
+      filter(node==idNODE)
+    
+    #master_node <- idNODE-1
+    
+    sub_dend <- node %>% select(x=xe, y=ye, z=ze, ha, va, cut_vec=level)  %>%
+      mutate(class="dend",
+             sub_id=NA)
+    
+    sub_dend_full <- bind_rows(select(node, x=xs,y=ys,z=zs),
+                               select(node, x=xe,y=ye,z=ze))
+    
+    
+    full_subdend_info <- list(info=sub_dend, full_coords=sub_dend_full)
+    
+    if(idNODE==nrow(df_sorted)){
+      ## no know subnodes so far ... just elongation directions
+      #sub_node <- NULL
+      subnode_id <- NULL
+      #full_vec_pos <- NULL
+      full_subnode_info <- NULL
+    } else {
+      next_node <- df_sorted %>% filter(node==idNODE+1)
+      subnode_id <- next_node$node
+      sub_node <- next_node %>%
+        select(x=xs, y=ys, z=zs, sub_id=node) %>%
+        rowwise() %>%
+        mutate(ha=get_ha(x,y,node$xs, node$ys),
+               dist=dist_pts(x,y,z,node$xs, node$ys, node$zs),
+               va=get_va(dist, z, node$zs),
+               class="node") %>%
+        select(-dist)
+      
+      if(next_node$level!=node$level){
+        ## vector edges need to be inserted
+        full_vec_pos <- main_vectors_df[[n]] %>% #rowwise() %>%
+          filter(between(level, node$level, as.numeric(next_node$level-1))) %>%
+          select(x=xe, y=ye, z=ze) %>%
+          bind_rows(select(node, x=xs, y=ys, z=zs),
+                    .,
+                    select(next_node, x=xs, y=ys, z=zs))
+      } else {
+        
+        full_vec_pos <- bind_rows(select(node, x=xs, y=ys, z=zs),
+                                  select(next_node, x=xs, y=ys, z=zs))
+        
+      }
+      
+      full_subnode_info <- list(node_id=idNODE+1, 
+                                info=sub_node, 
+                                full_coords=full_vec_pos)
+      
+    }
+    
+    
+    final_list <- list(node_id=node$node,
+                       master_id=idNODE-1,
+                       subnodes=list(subnode_id) %>% compact(),
+                       pos=node %>% select(x=xs, y=ys, z=zs),
+                       subnode_full=list(full_subnode_info) %>% compact(),
+                       subdend_full=list(full_subdend_info)
+    )
+    return(final_list)
+    
+    
+  })
+  
+  return(assigned_nodes)
+  
+}
 
 
 
