@@ -1080,7 +1080,8 @@ dist_pts <- function(x1, y1, z1, x2, y2, z2){
   sqrt((x1-x2)^2+(y1-y2)^2+(z1-z2)^2)
   
 }
-get_va <- function(dist, z2, z1){
+get_va <- function(dist, z1, z2){
+  ## z1 = destination, z2=start
   angle <- rad2deg(asin((abs(z1-z2))/dist))
   if(z2>=z1){
     fin <- 0-angle
@@ -1091,6 +1092,7 @@ get_va <- function(dist, z2, z1){
 }
 
 get_ha <- function(x2,y2,x1,y1){
+  ## x2 = destination... x1 = begin
   angle <- rad2deg(atan((abs(x1-x2))/abs(y1-y2)))
   if(x1>=x2&y1>=y2){
     fin <- 270-angle
@@ -1200,6 +1202,100 @@ define_full_vector_info <- function(ELD){
   return(list(all_vecs, full_voxels))
 }
 
+
+# xs <- all_vectors[[1]]$xs
+# ys <- all_vectors[[1]]$ys
+# zs <- all_vectors[[1]]$zs
+# xe <- all_vectors[[1]]$xe
+# ye <- all_vectors[[1]]$ye
+# ze <- all_vectors[[1]]$ze
+
+get_full_vector_voxels <- function(V){
+  
+  xs <- V[["xs"]]
+  ys <- V[["ys"]]
+  zs <- V[["zs"]]
+  xe <- V[["xe"]]
+  ye <- V[["ye"]]
+  ze <- V[["ze"]]
+  dist <- dist_pts(xs,ys,zs,xe,ye,ze)
+
+  ha <- get_ha(xe, ye, xs, ys)
+
+  va <- get_va(dist, ze, zs)
+
+  
+    elongate_3d_sphere(full_image, ha, va, xs, ys, zs, round(dist))%>% 
+      select(x,y,z) %>%
+    return()
+        
+}
+
+adjust_duplicated_starts <- function(MAIND){
+  
+  all_vectors <- lapply(MAIND, get_all_subdendrite_vectors) %>% 
+    Reduce(function(x,y)append(x,y),.)
+  
+  all_vectors_fv <- lapply(all_vectors, get_full_vector_voxels) 
+  
+  all_vectors_fv_labeled <- lapply(1:length(all_vectors), function(n){mutate(all_vectors_fv[[n]], vec_id=n)}) %>%
+    bind_rows() %>%
+    mutate(id=paste(x,y,sep="_"))
+  
+  dup <- lapply(1:length(all_vectors), function(n){
+    
+    to_check <- all_vectors_fv_labeled %>%
+      filter(vec_id==n) %>%
+      pull(id)
+    
+    to_compare <- all_vectors_fv_labeled %>%
+      filter(!vec_id==n)
+    
+    crossed <- to_compare %>%
+      filter(id %in% to_check)
+      
+    if(nrow(crossed)==0){
+      return(NULL)
+    } else {
+      
+      tibble(v1=min(c(n, unique(crossed$vec_id))),
+             v2=max(c(n, unique(crossed$vec_id))),
+             x=median(crossed$x)%>%round(),
+             y=median(crossed$y)%>%round(),
+             z=median(crossed$z)%>%round()) %>%
+        return()
+
+    }
+    
+  }) %>% compact() %>%
+    bind_rows() %>%
+    mutate(id=paste(v1, v2, sep="_")) %>%
+    group_by(id) %>%
+    summarize(v1=unique(v1),
+              v2=unique(v2),
+              x=round(median(x)),
+              y=round(median(y)),
+              z=round(median(z))) %>% rowwise() %>%
+    mutate(v1_angle=select_angle(v1, all_vectors = all_vectors),
+           v2_angle=select_angle(v2, all_vectors = all_vectors))
+  
+  ### angle smaller 90 deg ... set cross as new subnode
+  
+  
+  
+  ### angle larger 90 deg... do not adjust
+  
+  
+}
+
+select_angle <- function(n, all_vectors, col){
+  
+  all_vectors[[n]][[col]]
+  
+}
+
+
+
 #start <- start_b
 #elgt_len <- round(len_b)
 screen_subdendrite_starts <- function(start, rel_z_layer, det_rad, elgt_len, VEC){
@@ -1246,20 +1342,26 @@ find_subd_cluster <- function(df){
 
 find_subd_cluster_man <- function(df, EPS, MPTS){
   df_filtered <- df %>% 
-    filter(i!=0,
-           #dist>2.5*soma_radius
-    ) %>%
+    .[which(.$i!=0),] %>%
+    # filter(i!=0,
+    #        #dist>2.5*soma_radius
+    # ) %>%
     select(x,y,z)
   if(nrow(df_filtered)==0){return(NULL)} 
   df_clustered <- df_filtered %>% 
     ungroup() %>%
     mutate(c=fpc::dbscan(df_filtered, eps = EPS, MinPts = MPTS)$cluster) %>%
-    filter(c!=0)
-  
+    #filter(c!=0)
+    .[which(.$c!=0),]
+    
   if(nrow(df_clustered)==0){return(NULL)}
   #ggplot(df_clustered %>% filter(c!=0), aes(x=x, y=z, color=as.character(c)))+ geom_point()
   df_centers <- lapply(unique(df_clustered$c), function(CLUST){
-    kmeans(df_clustered %>% filter(c==CLUST) %>% select(x,y,z), centers=1)$centers %>%
+    kmeans(df_clustered %>% 
+             #filter(c==CLUST) %>% 
+             .[which(.$c==CLUST),] %>%
+             select(x,y,z), 
+           centers=1)$centers %>%
       round() %>%
       set_names(nm=c("x","y","z"))
   }) #%>% bind_rows() #%>%
@@ -1373,11 +1475,13 @@ screen_circular <- function(det_rad, z_range, X, Y, Z, ha){
    
 
 
-screen_circular_new <- function(det_rad, z_range,inc, X, Y, Z, ha, ha_cutoff){
+screen_circular_new <- function(det_rad, z_range,inc, X, Y, Z, ha, ha_cutoff, screening_angle){
+  
+  t0 <- Sys.time()
   
   
-  bmin=ha-90
-  bmax=ha+90
+  bmin=ha-0.5*screening_angle
+  bmax=ha+0.5*screening_angle
   if(!is.null(ha_cutoff)){
     if(ha<ha_cutoff){
       if(bmax>ha_cutoff){
@@ -1400,6 +1504,8 @@ screen_circular_new <- function(det_rad, z_range,inc, X, Y, Z, ha, ha_cutoff){
   
   rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
     .[between(., 1, length(full_image))]
+  
+  #t1 <- Sys.time()
   
   lapply(seq(det_rad-inc, det_rad+inc, 1), function(DET_RAD){
     
@@ -1432,18 +1538,24 @@ screen_circular_new <- function(det_rad, z_range,inc, X, Y, Z, ha, ha_cutoff){
       
       if(between(bmin, 0, 360)&between(bmax, 0, 360)){
         
-        df_circ <- df_circ_full %>%
-          filter(between(af, bmin, bmax)) 
+      #  df_circ <- df_circ_full %>%
+      #    filter(between(af, bmin, bmax)) 
+        
+        df_circ <- df_circ_full[which(between(df_circ_full$af, bmin, bmax)),]
         
       } else if(bmin<0){
         
-        df_circ <- df_circ_full %>%
-          filter(between(af, bmin+360, 360)|between(af, 0, bmax))
+      #  df_circ <- df_circ_full %>%
+       #   filter(between(af, bmin+360, 360)|between(af, 0, bmax))
+        
+        df_circ <- df_circ_full[which(between(df_circ_full$af, bmin+360, 360)|between(df_circ_full$af, 0, bmax)),]
         
       } else {
         
-        df_circ <- df_circ_full %>%
-          filter(between(af, bmin, 360)|between(af, 0, bmax-360))
+       # df_circ <- df_circ_full %>%
+      #    filter(between(af, bmin, 360)|between(af, 0, bmax-360))
+        
+        df_circ <- df_circ_full[which(between(df_circ_full$af, bmin, 360)|between(df_circ_full$af, 0, bmax-360)),]
         
       }
       
@@ -1577,7 +1689,7 @@ fit_path_to_subd_cluster <- function(SUBD, full_dendrite, det_rad){
     rowwise() %>%
     mutate(dist=dist_pts(x,y,z,as.numeric(SUBD[["x"]]),as.numeric(SUBD[["y"]]),as.numeric(SUBD[["z"]])),
            ha=get_ha(x,y,as.numeric(SUBD[["x"]]),as.numeric(SUBD[["y"]])),
-           va=get_va(dist, z, as.numeric(SUBD[["z"]]))) %>%
+           va=get_va(dist, as.numeric(SUBD[["z"]]), z)) %>%
     filter(dist<=4*det_rad) #%>%
   
   if(nrow(df_dist_raw)==0){return(NULL)}
@@ -1600,7 +1712,7 @@ fit_path_to_subd_cluster <- function(SUBD, full_dendrite, det_rad){
   final_intersection <- df_dist[which(df_dist$score==max(df_dist$score)),] %>%
     .[which(.$dist==min(.$dist)),]
   
-  subd_start <- final_intersection %>% select(xs=x,ys=y,zs=z, level, ha, va) %>%
+  subd_start <- final_intersection %>% select(xs=x,ys=y,zs=z, level, ha, va, dist) %>%
                              mutate(xe=SUBD[["x"]],
                                         ye=SUBD[["y"]],
                                         ze=SUBD[["z"]])
@@ -1693,11 +1805,13 @@ trace_dendrite <- function(SUBD, headnode, det_rad, z_range){
 }
 
 
-#MAIND_raw <- MASTER[[1]]
+#MAIND_raw <- safe_MAIND
 
 export_structure <- function(MASTER, output_file){
   
   node_order <- lapply(MASTER, function(MAIND_raw){   ## main dendrites
+    
+    print("new maind")
     
     if(is.null(MAIND_raw)){
       ## no sub node from main dendrite --> export main dendrite vectors
@@ -1776,6 +1890,8 @@ export_structure <- function(MASTER, output_file){
   
   full_coords <- lapply(1:length(node_order), function(MD){
     
+    print(MD)
+    
     order <- node_order[[MD]]
     MAIND <- MASTER[[MD]]
     
@@ -1785,7 +1901,12 @@ export_structure <- function(MASTER, output_file){
         mutate(id=c(1:nrow(.)))
     } else {
       
+      #WAY <- tibble(from=22, to=21)
+      
       full_vec_list <- lapply(order, function(WAY){
+        
+        print(WAY)
+        
         start_node <- MAIND[[which(unlist(lapply(MAIND, function(x){x$node_id==WAY$from})))]]
         
         start_full_subdendrites <- start_node[["subdend_full"]]
@@ -1802,27 +1923,38 @@ export_structure <- function(MASTER, output_file){
         }) %>% bind_rows()
         
         
+        ## now look for next node to go
+        
+        ## first check if next node is subnode of current node
+        
         start_full_subnodes <- start_node[["subnode_full"]]
-        rel <- which(unlist(lapply(start_full_subnodes, function(x){x[[1]]==WAY$to})))
-        if(length(rel)==1){
-          return(bind_rows(subdend, start_full_subnodes[[rel]]$full_coords))
-        }
+        
+        ## if no subnnode is assigned yet... we need to go to the master node
+        if(length(start_full_subnodes)!=0){
+          rel <- which(unlist(lapply(start_full_subnodes, function(x){x[[1]]==WAY$to})))
+          if(length(rel)==1){
+            return(bind_rows(subdend, start_full_subnodes[[rel]]$full_coords))
+          }           
+        } 
         ## if at this point we havent found any subnode... we probably need to go to the master node
         end_node <- MAIND[[which(unlist(lapply(MAIND, function(x){x$node_id==WAY$to})))]]
         end_full_subnodes <- end_node[["subnode_full"]]
-        rel <- which(unlist(lapply(start_full_subnodes, function(x){x[[1]]==WAY$from})))
+        rel <- which(unlist(lapply(end_full_subnodes, function(x){x[[1]]==WAY$from})))
         if(length(rel)==1){
-          return(bind_rows(subdend, end_full_subnodes[[rel]]$full_coords))
+          
+          ## we need to invert the sequnce of the coordinates
+          inv <- end_full_subnodes[[rel]]$full_coords %>% mutate(id=c(1:nrow(.))) %>%
+            arrange(desc(id)) %>% select(-id)
+          return(bind_rows(subdend, inv))
         } else {
           print("no match found???")
         }
       }) %>% bind_rows() %>%
         mutate(id=c(1:nrow(.)))
       
-    
-     
-      
     }
+    
+    
     full_maind <- bind_rows(full_vec_list, arrange(full_vec_list, desc(id))) %>%
         select(-id, -z) %>%
         bind_rows(select(SOMA, x,y), ., select(SOMA, x,y))
@@ -1836,6 +1968,125 @@ export_structure <- function(MASTER, output_file){
   
   
 }  
+
+get_linear_equation <- function(VEC){
+  
+   
+  if(VEC[["xe"]]==VEC[["xs"]]){
+    ## infinite m
+    return(list(m=NULL, b=NULL, 
+                xdef=VEC[["xs"]], 
+                ydef=c(min(c(VEC[["ye"]],VEC[["ys"]])), max(c(VEC[["ye"]],VEC[["ys"]])))))
+    
+  }             
+  
+  if(VEC[["xe"]]<VEC[["xs"]]){
+    xs <- VEC[["xe"]]
+    xe <- VEC[["xs"]]
+    ys <- VEC[["ye"]]
+    ye <- VEC[["ys"]]
+  } else {
+    xs <- VEC[["xs"]]
+    xe <- VEC[["xe"]]
+    ys <- VEC[["ys"]]
+    ye <- VEC[["ye"]]
+  }
+  
+
+  
+  m <- (ye-ys)/(xe-xs)
+
+  b <- ys-m*xs
+  
+  return(list(m=m, b=b, xdef=c(min(c(xs, xe)),max(c(xs, xe))),
+              ydef=c(min(c(ys, ye)),max(c(ys, ye)))))
+    
+}
+
+check_for_intersections <- function(n, linear_equations){
+  #print(n)
+  #f1 <- linear_equations[[n]]
+  f <- linear_equations[[n]]
+  intersections <- c(1:length(linear_equations)) %>% 
+    .[which(.!=n)] %>%
+    lapply(function(i){
+      is <- intersect_lineq(f, linear_equations[[i]]) 
+      
+      if(is.null(is)){return(NULL)}
+        return(mutate(is, v2=i))
+      }) %>%
+    compact() %>%
+    bind_rows() %>%
+    mutate(v1=n)
+
+  in_def_raw <- intersections %>%
+    ## in my vector def
+    filter(between(x, min(f$xdef), max(f$xdef))&between(y, min(f$ydef), max(f$ydef))) #%>%
+  
+  if(nrow(in_def_raw)==0){
+    return(NULL)
+  }
+  
+    in_def <- apply(in_def_raw,1,function(INT){
+      line <- linear_equations[[INT[["v2"]]]]
+      if(between(INT[["x"]], min(line$xdef), max(line$xdef))&between(INT[["y"]], min(line$ydef), max(line$ydef))){
+        return(INT)
+      } else {
+        return(NULL)
+      }
+    }, simplify=F) %>%
+    compact() %>%
+    bind_rows()
+  
+  # 
+  # if(is.null(f$m)){
+  #   in_def <- intersections %>%
+  #     filter(between(y, f$def[1], f$def[2]))
+  # } else {
+  #   in_def <- intersections %>% rowwise() %>%
+  #     filter(between(x, f$def[1], f$def[2]))
+  # }
+  
+  if(nrow(in_def)==0){
+    return(NULL)
+  } else {
+    return(in_def %>% mutate_at(.vars = c("x","y"), .funs = round))
+  }
+  
+}
+
+
+intersect_lineq <- function(f1, f2){
+  
+
+  if((is.null(f1$m)&is.null(f2$m))){
+    return(NULL)
+  }
+    
+
+  
+  if(is.null(f1$m)){
+    yi <- f2$m*f1$x+f2$b
+    return(tibble(x=f1$x, y=yi))
+  }
+  
+  if(is.null(f2$m)){
+    yi <- f1$m*f2$x+f1$b
+    return(tibble(x=f2$x, y=yi))
+  }
+  
+  if(f1$m==f2$m){
+    return(NULL)
+  }
+  xi <- (f1$b-f2$b)/(f2$m-f1$m)
+  yi <- f1$m*xi+f1$b
+  
+  return(tibble(x=xi, y=yi))
+}
+
+paste_ordered <- function(v1, v2){
+  paste(min(v1, v2), max(v1, v2), sep="_")
+}
 
 
 find_subdendritic_starts <- function(n, main_vectors, main_vectors_full, SOMA){
@@ -1869,12 +2120,102 @@ find_subdendritic_starts <- function(n, main_vectors, main_vectors_full, SOMA){
     #full_branches
     return(NULL)
   }
-  rescored_subdendrites <- apply(bind_rows(df_centers), 1, fit_path_to_subd_cluster, 
+  rescored_subdendrites_raw <- apply(bind_rows(df_centers), 1, fit_path_to_subd_cluster, 
                                  full_dendrite=full_dendrite,
                                  det_rad=det_rad) %>% 
-    compact() #%>% 
-  #bind_rows()
+    compact() 
   
+  ## remove duplicated subdendirte starts
+  linear_equations <- lapply(rescored_subdendrites_raw, get_linear_equation)
+  
+  intersections_raw <- lapply(1:length(linear_equations), check_for_intersections, 
+                          linear_equations=linear_equations) %>%
+    compact() #%>%
+  
+  if(length(intersections_raw)!=0){
+    
+    intersections <- intersections_raw %>%
+      bind_rows() %>%
+      rowwise() %>%
+      mutate(id=paste_ordered(v1, v2)) %>%
+      #mutate(id=paste(min(c(v1, v2)),max(c(v1, v2)), sep="_")) %>%
+      group_by(id) %>%
+      summarize(x=round(median(x)),
+                y=round(median(y)),
+                ) %>% 
+      mutate(v1=str_split(id, "_") %>% map_chr(.,1) %>% as.numeric(),
+             v2=str_split(id, "_") %>% map_chr(.,2)%>% as.numeric()) %>%
+      rowwise() %>%
+      mutate(v1_angle=select_angle(v1, all_vectors = rescored_subdendrites_raw, col="ha"),
+             v2_angle=select_angle(v2, all_vectors = rescored_subdendrites_raw, col="ha"),
+             z1=select_angle(v1, all_vectors = rescored_subdendrites_raw, col="ze"),
+             z2=select_angle(v2, all_vectors = rescored_subdendrites_raw, col="ze"),
+             dist1=select_angle(v1, all_vectors = rescored_subdendrites_raw, col="dist"),
+             dist2=select_angle(v2, all_vectors = rescored_subdendrites_raw, col="dist"),
+             angle_diff=ifelse(abs(v1_angle-v2_angle)>180,
+                               360-abs(v1_angle-v2_angle),
+                               abs(v1_angle-v2_angle))) %>%
+      filter(angle_diff<90,
+             abs(z1-z2)<8)
+    
+    
+      ## now create new list of duplicated subdendrites
+    
+    
+      #rel_vec_linear_eq <- lapply(rel_vecs, get_linear_equation)
+    
+      adjusted_subdendrite_starts <- apply(intersections, 1, function(PAIR){
+      
+        #print(PAIR)
+        
+        ha <- adj_deg(min(as.numeric(PAIR[["v1_angle"]]), as.numeric(PAIR[["v2_angle"]]))+as.numeric(PAIR[["angle_diff"]]))
+        xe <- as.numeric(PAIR[["x"]]) 
+        ye <- as.numeric(PAIR[["y"]])
+        ze <- round(mean(as.numeric(PAIR[["z1"]]),as.numeric(PAIR[["z2"]])))
+        
+        ## check which one has the lower distance to new node
+        v1 <- rescored_subdendrites_raw[[as.numeric(PAIR[["v1"]])]]
+        v2 <- rescored_subdendrites_raw[[as.numeric(PAIR[["v2"]])]]
+        d1 <- dist_pts(xe,ye,ze, v1$xs, v1$ys, v1$zs)
+        d2 <- dist_pts(xe,ye,ze, v2$xs, v2$ys, v2$zs)
+        
+        if(d1<d2){
+          start <- v1
+          d <- d1
+        } else {
+          start <- v2
+          d <- d2
+        }
+        
+        xs <- start$xs
+        ys <- start$ys
+        zs <- start$zs
+        va <- get_va(d, ze, zs)
+        
+        tibble(xs=xs,
+               ys=ys,
+               zs=zs,
+               level=start$level,
+               ha=ha,
+               va=va,
+               dist=d,
+               xe=xe,
+               ye=ye,
+               ze=ze) %>% return()
+        
+      
+
+        
+        
+      })
+    to_keep <- c(1:length(rescored_subdendrites_raw)) %>%
+      .[which(!. %in% c(intersections$v1, intersections$v2))]
+      
+    rescored_subdendrites <- append(rescored_subdendrites_raw[to_keep], adjusted_subdendrite_starts)  
+  } else {
+    rescored_subdendrites <- rescored_subdendrites_raw
+  }   
+    
   ## get hierarchy
   
   df_poslev <- rescored_subdendrites %>%
@@ -1884,7 +2225,7 @@ find_subdendritic_starts <- function(n, main_vectors, main_vectors_full, SOMA){
     left_join(bind_rows(main_vectors[[n]]) %>% select(level, dir), by="level")
   
   
-  df_sorted <- lapply(unique(df_poslev$level), function(LEV){
+  df_sorted <- lapply(sort(unique(df_poslev$level)), function(LEV){
     rel_rows <- df_poslev %>%
       filter(level==LEV)
     
@@ -1908,7 +2249,8 @@ find_subdendritic_starts <- function(n, main_vectors, main_vectors_full, SOMA){
     
     sub_dend <- node %>% select(x=xe, y=ye, z=ze, ha, va, cut_vec=level)  %>%
       mutate(class="dend",
-             sub_id=NA)
+             sub_id=NA,
+             ha=adj_deg(ha+180))
     
     sub_dend_full <- bind_rows(select(node, x=xs,y=ys,z=zs),
                                select(node, x=xe,y=ye,z=ze))
@@ -1930,7 +2272,7 @@ find_subdendritic_starts <- function(n, main_vectors, main_vectors_full, SOMA){
         rowwise() %>%
         mutate(ha=get_ha(x,y,node$xs, node$ys),
                dist=dist_pts(x,y,z,node$xs, node$ys, node$zs),
-               va=get_va(dist, z, node$zs),
+               va=get_va(dist, node$zs, z),
                class="node") %>%
         select(-dist)
       
@@ -1971,6 +2313,62 @@ find_subdendritic_starts <- function(n, main_vectors, main_vectors_full, SOMA){
   return(assigned_nodes)
   
 }
+
+
+get_all_subdendrite_vectors <- function(D){
+  
+  sd <- lapply(D$subdend_full, function(S){
+    vec <- lapply(2:nrow(S$full_coords), function(V){
+      tibble(xe=S$full_coords[[V,"x"]],
+             ye=S$full_coords[[V,"y"]],
+             ze=S$full_coords[[V,"z"]],
+             xs=S$full_coords[[V-1,"x"]],
+             ys=S$full_coords[[V-1,"y"]],
+             zs=S$full_coords[[V-1,"z"]],
+             ha=S$info$ha)
+    }) %>%
+      #mutate(ha=S$info$ha) %>% 
+      return()
+  }) %>% Reduce(function(x,y)append(x,y),.) %>%
+    return()
+  
+}
+
+
+get_all_vectors <- function(D){
+  
+  ## for subnodes
+  sn <- lapply(D$subnode_full, function(S){
+    vec <- lapply(2:nrow(S$full_coords), function(V){
+      
+      tibble(xe=S$full_coords[[V,"x"]],
+             ye=S$full_coords[[V,"y"]],
+             ze=S$full_coords[[V,"z"]],
+             xs=S$full_coords[[V-1,"x"]],
+             ys=S$full_coords[[V-1,"y"]],
+             zs=S$full_coords[[V-1,"z"]],)
+      
+    }) %>%
+      return()
+  }) %>% Reduce(function(x,y)append(x,y),.)
+  
+  sd <- lapply(D$subdend_full, function(S){
+    vec <- lapply(2:nrow(S$full_coords), function(V){
+      tibble(xe=S$full_coords[[V,"x"]],
+             ye=S$full_coords[[V,"y"]],
+             ze=S$full_coords[[V,"z"]],
+             xs=S$full_coords[[V-1,"x"]],
+             ys=S$full_coords[[V-1,"y"]],
+             zs=S$full_coords[[V-1,"z"]],)
+    }) %>%
+      return()
+  }) %>% Reduce(function(x,y)append(x,y),.)
+  sf <- append(sn, sd) %>%
+    return()
+}
+
+
+
 
 
 

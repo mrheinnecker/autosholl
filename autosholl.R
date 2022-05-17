@@ -98,11 +98,11 @@ soma_z_detection_degree_steps <- 0.05
     selection_vector <- rep(c(1:n_main_dendrites), 3) %>% 
       set_names(c((-n_main_dendrites+1):(2*n_main_dendrites)))
     
-    dendrite_segments <- lapply(1:n_main_dendrites, create_raster, avs=80) # dendrite
+    #dendrite_segments <- lapply(1:n_main_dendrites, create_raster, avs=80) # dendrite
     
-    sl <- Reduce(function(x,y)append(x,y),dendrite_segments)
+    #sl <- Reduce(function(x,y)append(x,y),dendrite_segments)
     
-    nosoma_image <- remove_soma(SOMA, soma_radius, full_image)
+    #nosoma_image <- remove_soma(SOMA, soma_radius, full_image)
     
     #binary_image <- bi2(sl, nosoma_image, "f:/data_sholl_analysis/test/spec_segs/60_nosoma_autocut.tif")
     
@@ -116,36 +116,57 @@ soma_z_detection_degree_steps <- 0.05
     main_vectors_full=lapply(main_vectors_raw, nth, 2)
     main_vectors_df <- lapply(main_vectors, bind_rows)
     
-    n <- 2
+    #n <- 2
     
     MASTER <- lapply(1:n_main_dendrites, find_subdendritic_starts, 
                      main_vectors=main_vectors,
                      main_vectors_full=main_vectors_full,
                      SOMA=SOMA)
     
-
+    ## check for duplicated dendrites
+    #rem_dup_MASTER <- lapply(1:n_main_dendrites, adjust_duplicated_starts)
+    
+    
+    
     ## tracing of subdendrite starts
     
     traced_MASTER <- lapply(1:n_main_dendrites, function(nMD){ ## main dendrites
       
-      #nMD <- 3
-      #nSD <- 8
+      #nMD <- 2
+      #nND <- 2
+      #nSD <- 1
       
       MV <- main_vectors_df[[nMD]]
       MAIND <- MASTER[[nMD]]
-      
+      nNODE_orig <- length(MAIND)
       if(is.null(MAIND)){
         return(NULL)
       }
       
-      traced_MAIND <- lapply(1:length(MAIND), function(nND){ ## nodes
+      # all_vectors <- lapply(MAIND, get_all_vectors) %>% 
+      #   Reduce(function(x,y)append(x,y),.) 
+      # 
+      # all_vectors_fv <- lapply(all_vectors, get_full_vector_voxels) 
+      
+      nND <- 0
+      n_processed <- 0
+      while(n_processed < length(MAIND)){
+        nND <- nND + 1
+      
+      
+      #traced_MAIND <- lapply(1:length(MAIND), function(nND){ ## nodes
         cat(paste("\n", nND, "of", length(MAIND)))
         
         NODE <- MAIND[[nND]]
         
         SUBD_list <- NODE$subdend_full
         
-        elgt_subd <- lapply(1:length(SUBD_list), function(nSD){ ## sub dendrites
+        new_subnodes <- NODE$subnodes
+        new_SUBD_list <- list()
+        new_SUBN_list <- NODE$subnode_full
+        
+        for(nSD in 1:length(SUBD_list)){
+          
           cat(paste("\n  subd:", nSD, "of", length(SUBD_list)))
           SUBD <- SUBD_list[[nSD]]
           SUBD_info <- SUBD$info
@@ -156,48 +177,167 @@ soma_z_detection_degree_steps <- 0.05
           xs <- SUBD_info$x
           ys <- SUBD_info$y
           zs <- SUBD_info$z
-          ha <- adj_deg(SUBD_info$ha+180)
-          ha_cutoff <- MV %>% filter(level==SUBD_info$cut_vec) %>% pull(ha)
+          #ha <- adj_deg(SUBD_info$ha+180)
+          ha <- adj_deg(SUBD_info$ha)
+          ## only define ha_cutoff if node intersects with main vectors
+          if(nND>nNODE_orig){
+            ha_cutoff <- NULL
+          } else {
+            ha_cutoff <- MV %>% 
+              filter(level==SUBD_info$cut_vec) %>% 
+              pull(ha)
+          }
           coord_list <- list()
           c <- 1
           abort <- F
+          node_detected <- F
+          
           while(abort==F){ 
+            #st <- Sys.time()
             cat(paste("\n    elgt step:",c))
             if(c>2){
               ha_cutoff <- NULL
+              screening_angle <- 180
+              z_range <- 3
+            } else {
+              screening_angle <- 180
+              z_range <- 5
             }
           #for(i in 1:4){  
-            centers <- screen_circular_new(det_rad, z_range,1, xs, ys, zs, ha, ha_cutoff) %>%
-              find_subd_cluster_man(., 5, 10)
+           # t1 <- Sys.time()
+            centers1 <- screen_circular_new(det_rad, z_range,1, xs, ys, zs, ha, ha_cutoff, screening_angle) #%>%
+          #  t2 <- Sys.time()
+            centers <- find_subd_cluster_man(centers1, 5, 10)
+          #  t3 <- Sys.time()
+          #  cat(paste("  ", round(t1-st, 2), round(t2-t1, 2), round(t3-t2, 2)))
             
-            if(length(centers)==0){
+            
+            
+            
+            if(length(centers)==0|c>30){
               ## no elongation detected
               abort=T
               cat("\n    stopped")
             } else if(length(centers)==1){
               ## subdendrite elongates
+              
               elgt <- centers[[1]]
-              ha <- get_ha(elgt[["x"]], elgt[["y"]], xs, ys)
-              xs <- elgt[["x"]]
-              ys <- elgt[["y"]]
-              zs <- elgt[["z"]]
-              coord_list[[c]] <- elgt
-              c <- c+1
+              dist <- dist_pts(elgt[["x"]], elgt[["y"]], elgt[["z"]], xs, ys,zs)
+              ha <- get_ha(elgt[["x"]], elgt[["y"]], xs,ys)
+              va <- get_va(dist, 
+                           elgt[["z"]], zs)
+
+              ## check if elongation overlaps with already present dendrite
+              vox <- elongate_3d_sphere(binary_image, ha, va, xs, ys, zs, round(dist)) %>%
+                mutate(id=paste(x,y, sep="_")) %>%
+                pull(id)
+              
+              overlap <- all_vectors_fv %>%
+                bind_rows() %>%
+                mutate(id=paste(x,y, sep="_")) %>%
+                filter(id %in% vox)
+              
+              if(nrow(overlap)>0&c>1){
+                abort <- T
+                cat("\n    crossed")
+              } else {
+                xs <- elgt[["x"]]
+                ys <- elgt[["y"]]
+                zs <- elgt[["z"]]    
+                coord_list[[c]] <- elgt
+                c <- c+1
+              } 
+              
             } else {
               ## node detected
               cat("\n    node")
+              node_detected <- T
               abort <- T
             }
+            
           }
           
-          new_SUBD <- list(SUBD$info, bind_rows(SUBD$full_coords, bind_rows(coord_list)))
+          if(node_detected==T){
+
+            
+            new_node_id <- length(MAIND)+1
+            
+            if(c==1){
+              last_pos <- SUBD$full_coords[nrow(SUBD$full_coords),]
+            } else {
+              last_pos=as_tibble(last(coord_list))
+            }
+            ## remove dendrite from subdendrite list in current node
+            ## by just not adding it to new list
+            #traced_SUBD <- NULL
+
+            ## add subnode to subnode list of current node
+            
+            new_subnodes <- append(new_subnodes, new_node_id)
+            
+            ## add full subnode to full subnode list of current node
+            
+            new_SUBN <- list(node_id=new_node_id,
+                             info=SUBD$info, 
+                             full_coords=bind_rows(SUBD$full_coords, bind_rows(coord_list)))
+            
+            new_SUBN_list <- append(new_SUBN_list, list(new_SUBN))
+
+            ## add new node to full node list
+            
+            proc_centers <- lapply(centers, function(CENT){
+              
+              info <- CENT %>% as_tibble() %>%
+                mutate(ha=get_ha(x,y, last_pos$x, last_pos$y),
+                       va=get_va(dist_pts(x,y,z, last_pos$x, last_pos$y, last_pos$z), z, last_pos$z),
+                       class="node",
+                       sub_id=new_node_id,
+                       )
+              
+              full_coords <- bind_rows(SUBD$full_coords,
+                                       bind_rows(coord_list))
+              
+              
+              return(list(info=info, full_coords=full_coords))
+            })
+            
+            
+            new_NODE <- list(node_id=new_node_id,
+                             master_id=NODE$node_id,
+                             subnodes=list(),
+                             pos=last_pos,
+                             subnode_full=list(),
+                             subdend_full=proc_centers)
+
+            MAIND <- append(MAIND, list(new_NODE))
+
+          } else {
+
+            ## update subdendrite list in current node
+            traced_SUBD <- list(info=SUBD$info, full_coords=bind_rows(SUBD$full_coords, bind_rows(coord_list)))
+            new_SUBD_list <- append(new_SUBD_list, list(traced_SUBD))
+
+            
+            
+          }
           
-          return(new_SUBD)
-        })
+          
+        } ## end of for... over subdendrite list
+        #MAIND[[nND]] <- append(NODE[c(1:2)], list(subdend_full=new_SUBD_list))
         
-        new_NODE <- append(NODE[c(1:5)], list(subdend_full=elgt_subd))
-        return(new_NODE)
-    })
+        MAIND[[nND]] <- list(node_id=NODE$node_id,
+                             master_id=NODE$master_id,
+                             subnodes=new_subnodes,
+                             pos=NODE$pos,
+                             subnode_full=new_SUBN_list,
+                             subdend_full=new_SUBD_list)
+        
+        n_processed <- n_processed + 1
+
+    } ## end of while ... return full new MAIND
+      
+      
+      
       # te <- bind_rows(coord_list) %>% select(x,y) %>% bind_rows(SUBD_info %>% select(x, y),.) %>% mutate(id=c(1:nrow(.)))
       # 
       #   write_csv(bind_rows(te%>% select(-id), arrange(te, desc(id)) %>% select(-id)), 
@@ -211,10 +351,15 @@ soma_z_detection_degree_steps <- 0.05
   })
     
     
-    export_structure(traced_MASTER, "f:/data_sholl_analysis/test/dendrites/first.csv")
+    
+    traced_MASTER <- MASTER
+    
+    traced_MASTER <- list(MAIND)
+    
+    export_structure(traced_MASTER, "f:/data_sholl_analysis/test/dendrites/add_nodes.csv")
     
     
-    
+    export_structure(MASTER, "f:/data_sholl_analysis/test/dendrites/start_adj_dup.csv")
     
     
     n <- 2
