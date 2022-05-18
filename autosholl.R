@@ -98,15 +98,20 @@ soma_z_detection_degree_steps <- 0.05
     selection_vector <- rep(c(1:n_main_dendrites), 3) %>% 
       set_names(c((-n_main_dendrites+1):(2*n_main_dendrites)))
     
-    #dendrite_segments <- lapply(1:n_main_dendrites, create_raster, avs=80) # dendrite
+    dendrite_segments <- lapply(1:n_main_dendrites, create_raster, avs=80) # dendrite
     
-    #sl <- Reduce(function(x,y)append(x,y),dendrite_segments)
+    sl <- Reduce(function(x,y)append(x,y),dendrite_segments)
     
-    #nosoma_image <- remove_soma(SOMA, soma_radius, full_image)
+    nosoma_image <- remove_soma(SOMA, soma_radius, full_image)
     
-    #binary_image <- bi2(sl, nosoma_image, "f:/data_sholl_analysis/test/spec_segs/60_nosoma_autocut.tif")
+    rem_mainobj_image <- remove_main_dendrites(nosoma_image, main_vectors, main_vectors_full)
     
-    #writeTIFF(binary_image, "f:/data_sholl_analysis/test/intermediate/binarized.tif")
+    
+    
+    writeTIFF(rem_mainobj_image, "f:/data_sholl_analysis/test/intermediate/no_main_vecs_no_soma.tif")
+    binary_image <- bi2(sl, rem_mainobj_image, "f:/data_sholl_analysis/test/spec_segs/60_nosoma_autocut.tif")
+    
+    writeTIFF(binary_image, "f:/data_sholl_analysis/test/intermediate/new_binary.tif")
     
     binary_image <- readTIFF("f:/data_sholl_analysis/test/intermediate/binarized.tif", all=T)
     #filtered_binary <- lapply(binary_image, medianblur, n=2)
@@ -126,35 +131,39 @@ soma_z_detection_degree_steps <- 0.05
     ## check for duplicated dendrites
     #rem_dup_MASTER <- lapply(1:n_main_dendrites, adjust_duplicated_starts)
     
-    
+    export_structure(MASTER, "f:/data_sholl_analysis/test/dendrites/subd_starts_adj2.csv")
     
     ## tracing of subdendrite starts
     
     traced_MASTER <- lapply(1:n_main_dendrites, function(nMD){ ## main dendrites
       
-      #nMD <- 2
-      #nND <- 2
-      #nSD <- 1
+      nMD <- 2
+      nND <- 17
+      nSD <- 2
       
       MV <- main_vectors_df[[nMD]]
       MAIND <- MASTER[[nMD]]
-      nNODE_orig <- length(MAIND)
+      
       if(is.null(MAIND)){
         return(NULL)
       }
       
-      # all_vectors <- lapply(MAIND, get_all_vectors) %>% 
-      #   Reduce(function(x,y)append(x,y),.) 
-      # 
-      # all_vectors_fv <- lapply(all_vectors, get_full_vector_voxels) 
+      ## for testing ... remove nodes at end of dendrite...
+      # MAIND <- MAIND[c(1:15)]
+      # MAIND[[15]]$subnodes <- list()
+      # MAIND[[15]]$subnode_full <- list()
+      nNODE_orig <- length(MAIND)
+      
+      all_vectors <- lapply(MAIND, get_all_vectors) %>%
+        Reduce(function(x,y)append(x,y),.)
+
+      all_vectors_fv <- lapply(all_vectors, get_full_vector_voxels)
       
       nND <- 0
       n_processed <- 0
-      while(n_processed < length(MAIND)){
+      while(n_processed < length(MAIND)){ ## nodes
         nND <- nND + 1
-      
-      
-      #traced_MAIND <- lapply(1:length(MAIND), function(nND){ ## nodes
+ 
         cat(paste("\n", nND, "of", length(MAIND)))
         
         NODE <- MAIND[[nND]]
@@ -171,33 +180,36 @@ soma_z_detection_degree_steps <- 0.05
           SUBD <- SUBD_list[[nSD]]
           SUBD_info <- SUBD$info
           
-          det_rad <- 10
-          z_range <- 5
+          det_rad <- 12
+          #z_range <- 5
         
           xs <- SUBD_info$x
           ys <- SUBD_info$y
           zs <- SUBD_info$z
-          #ha <- adj_deg(SUBD_info$ha+180)
           ha <- adj_deg(SUBD_info$ha)
           ## only define ha_cutoff if node intersects with main vectors
-          if(nND>nNODE_orig){
+
+          if(SUBD_info$d_to_cv>45){
             ha_cutoff <- NULL
           } else {
             ha_cutoff <- MV %>% 
-              filter(level==SUBD_info$cut_vec) %>% 
+              filter(level==SUBD_info$clos_vec) %>% 
               pull(ha)
           }
+          
+          
           coord_list <- list()
           c <- 1
           abort <- F
           node_detected <- F
+          remove_dend <- F
           
           while(abort==F){ 
             #st <- Sys.time()
             cat(paste("\n    elgt step:",c))
-            if(c>2){
+            if(c>4){
               ha_cutoff <- NULL
-              screening_angle <- 180
+              screening_angle <- 160
               z_range <- 3
             } else {
               screening_angle <- 180
@@ -205,19 +217,29 @@ soma_z_detection_degree_steps <- 0.05
             }
           #for(i in 1:4){  
            # t1 <- Sys.time()
-            centers1 <- screen_circular_new(det_rad, z_range,1, xs, ys, zs, ha, ha_cutoff, screening_angle) #%>%
+            
+            Z <- round(zs+tan(deg2rad(va))*det_rad)
+            
+            rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
+              .[between(., 1, length(full_image))]
+            
+            centers1 <- screen_circular_new(det_rad, rel_z_layer,
+                                            1, xs, ys, zs, ha, ha_cutoff, screening_angle) #%>%
           #  t2 <- Sys.time()
             centers <- find_subd_cluster_man(centers1, 5, 10)
+            
+            #centers <- find_subd_cluster_man(centers1, 5, 8)
+            
+            
           #  t3 <- Sys.time()
           #  cat(paste("  ", round(t1-st, 2), round(t2-t1, 2), round(t3-t2, 2)))
-            
-            
-            
-            
             if(length(centers)==0|c>30){
               ## no elongation detected
               abort=T
               cat("\n    stopped")
+              if(c==1){
+                remove_dend <- T
+              }
             } else if(length(centers)==1){
               ## subdendrite elongates
               
@@ -258,7 +280,6 @@ soma_z_detection_degree_steps <- 0.05
           }
           
           if(node_detected==T){
-
             
             new_node_id <- length(MAIND)+1
             
@@ -269,7 +290,6 @@ soma_z_detection_degree_steps <- 0.05
             }
             ## remove dendrite from subdendrite list in current node
             ## by just not adding it to new list
-            #traced_SUBD <- NULL
 
             ## add subnode to subnode list of current node
             
@@ -285,21 +305,9 @@ soma_z_detection_degree_steps <- 0.05
 
             ## add new node to full node list
             
-            proc_centers <- lapply(centers, function(CENT){
-              
-              info <- CENT %>% as_tibble() %>%
-                mutate(ha=get_ha(x,y, last_pos$x, last_pos$y),
-                       va=get_va(dist_pts(x,y,z, last_pos$x, last_pos$y, last_pos$z), z, last_pos$z),
-                       class="node",
-                       sub_id=new_node_id,
-                       )
-              
-              full_coords <- bind_rows(SUBD$full_coords,
-                                       bind_rows(coord_list))
-              
-              
-              return(list(info=info, full_coords=full_coords))
-            })
+            proc_centers <- lapply(centers, format_new_subdendrite_starts, nMD=nMD, 
+                                   main_vectors_full=main_vectors_full, 
+                                   last_pos=last_pos)
             
             
             new_NODE <- list(node_id=new_node_id,
@@ -311,19 +319,25 @@ soma_z_detection_degree_steps <- 0.05
 
             MAIND <- append(MAIND, list(new_NODE))
 
+            additional_vectors <- get_all_vectors(new_NODE) %>% lapply(get_full_vector_voxels)
+          } else if(remove_dend==T){ 
+             
+            ## remove current dendrite from node
+            #    if(sum(length(), length()))
+            
+            
           } else {
 
             ## update subdendrite list in current node
             traced_SUBD <- list(info=SUBD$info, full_coords=bind_rows(SUBD$full_coords, bind_rows(coord_list)))
             new_SUBD_list <- append(new_SUBD_list, list(traced_SUBD))
 
-            
-            
+            additional_vectors <- list()
           }
           
           
+          
         } ## end of for... over subdendrite list
-        #MAIND[[nND]] <- append(NODE[c(1:2)], list(subdend_full=new_SUBD_list))
         
         MAIND[[nND]] <- list(node_id=NODE$node_id,
                              master_id=NODE$master_id,
@@ -332,21 +346,12 @@ soma_z_detection_degree_steps <- 0.05
                              subnode_full=new_SUBN_list,
                              subdend_full=new_SUBD_list)
         
+        all_vectors_fv <- append(all_vectors_fv, additional_vectors)
+        
         n_processed <- n_processed + 1
 
     } ## end of while ... return full new MAIND
-      
-      
-      
-      # te <- bind_rows(coord_list) %>% select(x,y) %>% bind_rows(SUBD_info %>% select(x, y),.) %>% mutate(id=c(1:nrow(.)))
-      # 
-      #   write_csv(bind_rows(te%>% select(-id), arrange(te, desc(id)) %>% select(-id)), 
-      #         "f:/data_sholl_analysis/test/dendrites/test.csv")  
-      # 
-        
-    #  new_MASTER <- MASTER  
-    
-     # new_MASTER[[2]] <- traced_MAIND
+     
     return(traced_MAIND)        
   })
     
@@ -356,10 +361,10 @@ soma_z_detection_degree_steps <- 0.05
     
     traced_MASTER <- list(MAIND)
     
-    export_structure(traced_MASTER, "f:/data_sholl_analysis/test/dendrites/add_nodes.csv")
+    export_structure(traced_MASTER, "f:/data_sholl_analysis/test/dendrites/dr12_ang150_11.csv")
     
     
-    export_structure(MASTER, "f:/data_sholl_analysis/test/dendrites/start_adj_dup.csv")
+    
     
     
     n <- 2

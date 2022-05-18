@@ -43,9 +43,14 @@ elongate_line <- function(GRAD, zGRAD, x_start, y_start, z_start, n){
   xr <- round(cos(deg2rad(GRAD)),10)
   
   c(
-  y=ceiling(y_start+(n*yr*zr)),
-  x=ceiling(x_start+(n*xr*zr)),
-  z=ceiling(z_start+(n*zo))
+  # y=ceiling(y_start+(n*yr*zr)),
+  # x=ceiling(x_start+(n*xr*zr)),
+  # z=ceiling(z_start+(n*zo))
+  
+    y=round(y_start+(n*yr*zr)),
+    x=round(x_start+(n*xr*zr)),
+    z=round(z_start+(n*zo))
+  
   ) %>% return()
 }
 
@@ -1042,36 +1047,69 @@ create_raster <- function(nELD, avs){
 
 
 remove_soma <- function(SOMA, soma_radius, full_image){
-  
   nosoma_image <- lapply(1:length(full_image), function(n){
-  
     r <- soma_radius+abs(round(SOMA$z)-n)
     circ <- lapply(c(-r:r), function(X){
-    
       y=sqrt(r^2-X^2)
-      
       bottom <- round(SOMA$y-y)
       top <- round(SOMA$y+y)
-      
-      # lapply(c(bottom:top), function(Y){
-      #   
-      # })
-      
       lapply(c(bottom:top), get_single_index, x=X+round(SOMA$x), nr=nr_orig) %>%
         return()
-    
     }) %>% unlist() 
-    
     LAYER <- full_image[[n]]
     LAYER[circ] <- 0
-    
     return(LAYER)
   })  
-  
-  
   return(nosoma_image)
-  
 }
+
+remove_main_dendrites <- function(IMG, main_vectors, main_vectors_full){
+  
+  rem_rad <- 4
+  z_range <- 0
+  
+  av <- lapply(1:length(main_vectors), function(n){
+    
+    rel_vecs_raw <- main_vectors[[n]]
+    full_vecs_raw <- main_vectors_full[[n]]
+    
+    rel_vecs <- rel_vecs_raw#[c(2:length(rel_vecs_raw))]
+    full_vecs <- full_vecs_raw#[c(2:length(full_vecs_raw))]
+    
+    full_dendrite <- bind_rows(full_vecs) %>% 
+      mutate_all(.funs = as.numeric) %>%
+      mutate(ind=get_single_index(x,y,nr_orig)) %>%
+      pull(ind) 
+    
+    #rem_vox <- lapply(rem_rad, function(R){
+    
+   rem_vox <- lapply(seq(0, rem_rad, 0.5), function(R){
+
+      all_surrounding_vox <- define_surr_layer(rel_vecs, full_vecs, R, 0, full_image)
+
+    }) %>%
+      bind_rows() %>%
+      mutate(ind=get_single_index(x,y,nr_orig)) %>%
+      #return()
+      pull(ind) %>%
+      c(.,full_dendrite) %>%
+      return()
+    
+  }) %>% c(recursive=T) %>% unique()
+  
+
+  rem_img <- lapply(IMG, function(LAYER){
+    LAYER[av] <- 0
+    #return(matrix(LAYER, nrow = nr_orig))
+    return(LAYER)
+  })
+  
+  return(rem_img)
+}
+
+
+
+
 
 
 dist_pts <- function(x1, y1, z1, x2, y2, z2){
@@ -1298,9 +1336,9 @@ select_angle <- function(n, all_vectors, col){
 
 #start <- start_b
 #elgt_len <- round(len_b)
-screen_subdendrite_starts <- function(start, rel_z_layer, det_rad, elgt_len, VEC){
+screen_subdendrite_starts <- function(start, rel_z_layer, det_rad, elgt_len, VEC, IMG){
   df <- lapply(rel_z_layer, function(ZS){
-    line <- elongate_3d_sphere(binary_image, VEC[["ha"]], VEC[["va"]], 
+    line <- elongate_3d_sphere(IMG, VEC[["ha"]], VEC[["va"]], 
                                start[["x"]], start[["y"]], ZS, elgt_len)
   }) %>% 
     bind_rows() %>% 
@@ -1338,7 +1376,7 @@ find_subd_cluster <- function(df){
   return(df_centers)
 }
 
-
+#df <-centers1
 
 find_subd_cluster_man <- function(df, EPS, MPTS){
   df_filtered <- df %>% 
@@ -1399,7 +1437,7 @@ adj_deg <- function(GRAD){
 # ha <- 290
 ## es geht nur ha zwischen 90 und 270
 
-screen_circular <- function(det_rad, z_range, X, Y, Z, ha){
+screen_circular <- function(det_rad, z_range, X, Y, Z, ha, IMG){
  
   
   bmin=ha-90
@@ -1456,7 +1494,7 @@ screen_circular <- function(det_rad, z_range, X, Y, Z, ha){
     
     df_circ %>%     
       rowwise() %>%
-      mutate(i=select_intensity(xa, ya, ZS, binary_image),
+      mutate(i=select_intensity(xa, ya, ZS, IMG),
              z=ZS) %>%
       
       select(x=xa, y=ya, z, i) %>%
@@ -1475,7 +1513,7 @@ screen_circular <- function(det_rad, z_range, X, Y, Z, ha){
    
 
 
-screen_circular_new <- function(det_rad, z_range,inc, X, Y, Z, ha, ha_cutoff, screening_angle){
+screen_circular_new <- function(det_rad, rel_z_layer,inc, X, Y, Z, ha, ha_cutoff, screening_angle){
   
   t0 <- Sys.time()
   
@@ -1502,8 +1540,8 @@ screen_circular_new <- function(det_rad, z_range,inc, X, Y, Z, ha, ha_cutoff, sc
     }
   }
   
-  rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
-    .[between(., 1, length(full_image))]
+  # rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
+  #   .[between(., 1, length(full_image))]
   
   #t1 <- Sys.time()
   
@@ -1583,7 +1621,7 @@ screen_circular_new <- function(det_rad, z_range,inc, X, Y, Z, ha, ha_cutoff, sc
 
              
 
-define_surr_layer <- function(rel_vecs, full_vecs, det_rad, z_range){
+define_surr_layer <- function(rel_vecs, full_vecs, det_rad, z_range, IMG){
   all_sorrounding_vox <- lapply(1:length(rel_vecs), function(v){ 
     cat(paste("\nvec:",v))
     
@@ -1655,17 +1693,18 @@ define_surr_layer <- function(rel_vecs, full_vecs, det_rad, z_range){
       
       #### performing circular screen at end of main dendrite:
       df_circ_end <- screen_circular(det_rad, z_range,
-                                     VEC[["xe"]], VEC[["ye"]], VEC[["ze"]], VEC[["ha"]])
+                                     VEC[["xe"]], VEC[["ye"]], VEC[["ze"]], VEC[["ha"]],
+                                     IMG)
       
     }
     
     if(len_t>0){
-      df_top <- screen_subdendrite_starts(start_t, rel_z_layer, det_rad, round(len_t), VEC)
+      df_top <- screen_subdendrite_starts(start_t, rel_z_layer, det_rad, round(len_t), VEC, IMG)
     } else {
       df_top <- NULL
     }
     if(len_b>0){
-      df_bottom <- screen_subdendrite_starts(start_b, rel_z_layer, det_rad, round(len_b), VEC)
+      df_bottom <- screen_subdendrite_starts(start_b, rel_z_layer, det_rad, round(len_b), VEC, IMG)
     } else {
       df_bottom <- NULL
     }
@@ -1712,10 +1751,14 @@ fit_path_to_subd_cluster <- function(SUBD, full_dendrite, det_rad){
   final_intersection <- df_dist[which(df_dist$score==max(df_dist$score)),] %>%
     .[which(.$dist==min(.$dist)),]
   
+  closest_main_vector <- df_dist_raw[which(df_dist_raw$dist==min(df_dist_raw$dist)),] 
+  
   subd_start <- final_intersection %>% select(xs=x,ys=y,zs=z, level, ha, va, dist) %>%
                              mutate(xe=SUBD[["x"]],
                                         ye=SUBD[["y"]],
-                                        ze=SUBD[["z"]])
+                                        ze=SUBD[["z"]],
+                                    clos_vec=closest_main_vector$level,
+                                    d_to_cv=closest_main_vector$dist)
   
   return(subd_start)
   
@@ -1758,7 +1801,7 @@ trace_dendrite <- function(SUBD, headnode, det_rad, z_range){
     
     df_circ_end <- screen_circular(det_rad, z_range,
                                    df_centers[["x"]], df_centers[["y"]], df_centers[["z"]], 
-                                   vec_angle)
+                                   vec_angle, binary_image)
     
     centers <- find_subd_cluster(df_circ_end)
     
@@ -1807,9 +1850,11 @@ trace_dendrite <- function(SUBD, headnode, det_rad, z_range){
 
 #MAIND_raw <- safe_MAIND
 
-export_structure <- function(MASTER, output_file){
+#tMASTER <- traced_MASTER
+
+export_structure <- function(tMASTER, output_file){
   
-  node_order <- lapply(MASTER, function(MAIND_raw){   ## main dendrites
+  node_order <- lapply(tMASTER, function(MAIND_raw){   ## main dendrites
     
     print("new maind")
     
@@ -1893,7 +1938,7 @@ export_structure <- function(MASTER, output_file){
     print(MD)
     
     order <- node_order[[MD]]
-    MAIND <- MASTER[[MD]]
+    MAIND <- tMASTER[[MD]]
     
     if(is.null(order)){
       ## no subdenedrites --> use main dendrite
@@ -1901,7 +1946,7 @@ export_structure <- function(MASTER, output_file){
         mutate(id=c(1:nrow(.)))
     } else {
       
-      #WAY <- tibble(from=22, to=21)
+      #WAY <- tibble(from=18, to=10)
       
       full_vec_list <- lapply(order, function(WAY){
         
@@ -2105,7 +2150,7 @@ find_subdendritic_starts <- function(n, main_vectors, main_vectors_full, SOMA){
   full_dendrite <- bind_rows(full_vecs) %>% 
     mutate_all(.funs = as.numeric)
   
-  all_sorrounding_vox <- define_surr_layer(rel_vecs, full_vecs, det_rad, z_range) %>%
+  all_sorrounding_vox <- define_surr_layer(rel_vecs, full_vecs, det_rad, z_range, binary_image) %>%
     filter(dist_to_soma>2.5*soma_radius)
   
   #print(1)
@@ -2167,51 +2212,110 @@ find_subdendritic_starts <- function(n, main_vectors, main_vectors_full, SOMA){
       adjusted_subdendrite_starts <- apply(intersections, 1, function(PAIR){
       
         #print(PAIR)
-        
-        ha <- adj_deg(min(as.numeric(PAIR[["v1_angle"]]), as.numeric(PAIR[["v2_angle"]]))+as.numeric(PAIR[["angle_diff"]]))
-        xe <- as.numeric(PAIR[["x"]]) 
-        ye <- as.numeric(PAIR[["y"]])
-        ze <- round(mean(as.numeric(PAIR[["z1"]]),as.numeric(PAIR[["z2"]])))
-        
-        ## check which one has the lower distance to new node
         v1 <- rescored_subdendrites_raw[[as.numeric(PAIR[["v1"]])]]
         v2 <- rescored_subdendrites_raw[[as.numeric(PAIR[["v2"]])]]
-        d1 <- dist_pts(xe,ye,ze, v1$xs, v1$ys, v1$zs)
-        d2 <- dist_pts(xe,ye,ze, v2$xs, v2$ys, v2$zs)
         
-        if(d1<d2){
-          start <- v1
-          d <- d1
+        ## if close to each other... do what i did
+        
+        dist_pp <- dist_pts(v1$xe, v1$ye, v1$ze, v2$xe, v2$ye, v2$ze)
+        
+        if(dist_pp<25){
+          ha <- adj_deg(min(as.numeric(PAIR[["v1_angle"]]), as.numeric(PAIR[["v2_angle"]]))+as.numeric(PAIR[["angle_diff"]]))
+          xe <- as.numeric(PAIR[["x"]]) 
+          ye <- as.numeric(PAIR[["y"]])
+          ze <- round(mean(as.numeric(PAIR[["z1"]]),as.numeric(PAIR[["z2"]])))
+          ## check which one has the lower distance to new node
+          d1 <- dist_pts(xe,ye,ze, v1$xs, v1$ys, v1$zs)
+          d2 <- dist_pts(xe,ye,ze, v2$xs, v2$ys, v2$zs)
+          if(d1<d2){
+            start <- v1
+            d <- d1
+          } else {
+            start <- v2
+            d <- d2
+          }
+          xs <- start$xs
+          ys <- start$ys
+          zs <- start$zs
+          va <- get_va(d, ze, zs)
+          
+          return(list(
+            tibble(xs=xs,
+                   ys=ys,
+                   zs=zs,
+                   level=start$level,
+                   clos_vec=start$clos_vec,
+                   d_to_cv=start$d_to_cv,
+                   ha=ha,
+                   va=va,
+                   dist=d,
+                   xe=xe,
+                   ye=ye,
+                   ze=ze),
+            c(PAIR[["v1"]], PAIR[["v2"]])
+          )
+          )
+          
         } else {
-          start <- v2
-          d <- d2
+          ## distance larger 25 .. check connection
+            ## load intesnsities of in between voxels
+          ha_pp <- get_ha(v2$xe, v2$ye, v1$xe, v1$ye)
+          va_pp <- get_va(dist_pp, v2$ze, v1$ze)
+          
+          int <- elongate_3d_sphere(binary_image, ha_pp, va_pp, v1$xe, v1$ye, v1$ze, dist_pp)
+          
+          score_mn <- mean(int$i)
+          score_gap <-  int %>% ungroup() %>%
+            mutate(cumu=cumsum(i)) %>%
+            group_by(cumu) %>%
+            summarize(c=length(i), mn=min(n)) %>%
+            filter(c==max(.$c)) %>%
+            pull(c)
+            
+          if(score_gap<10&score_mn>0.5){
+            ## connected ..  probably same dendrite
+              ## keep, but connect ends
+              ## remove longer one
+            if(v1$dist>v2$dist){
+              #to_rem <- v1
+              to_keep <- v1
+            } else {
+              #to_rem <- v2
+              to_keep <- v2
+            }
+            
+            return(list(to_keep, c(PAIR[["v1"]], PAIR[["v2"]])))
+            
+          } else {
+            ## not connected
+              ## no node adjustment
+            return(NULL)
+          }
+                
         }
         
-        xs <- start$xs
-        ys <- start$ys
-        zs <- start$zs
-        va <- get_va(d, ze, zs)
+        ## if not ... check connection
         
-        tibble(xs=xs,
-               ys=ys,
-               zs=zs,
-               level=start$level,
-               ha=ha,
-               va=va,
-               dist=d,
-               xe=xe,
-               ye=ye,
-               ze=ze) %>% return()
         
+        ## if connected
+        
+        
+        ## check if they are connected... if yes... take middle
+        
+        
+        ## if not ends are close to node... remove them.. 
+        
+        
+        
+        ## otherwise keep them and insert node
+        
+      }) %>% compact()
       
-
-        
-        
-      })
+      
     to_keep <- c(1:length(rescored_subdendrites_raw)) %>%
-      .[which(!. %in% c(intersections$v1, intersections$v2))]
+      .[which(!. %in% as.numeric(lapply(adjusted_subdendrite_starts, last) %>% unlist()))]
       
-    rescored_subdendrites <- append(rescored_subdendrites_raw[to_keep], adjusted_subdendrite_starts)  
+    rescored_subdendrites <- append(rescored_subdendrites_raw[to_keep], lapply(adjusted_subdendrite_starts, first))  
   } else {
     rescored_subdendrites <- rescored_subdendrites_raw
   }   
@@ -2247,7 +2351,7 @@ find_subdendritic_starts <- function(n, main_vectors, main_vectors_full, SOMA){
     
     #master_node <- idNODE-1
     
-    sub_dend <- node %>% select(x=xe, y=ye, z=ze, ha, va, cut_vec=level)  %>%
+    sub_dend <- node %>% select(x=xe, y=ye, z=ze, ha, va, cut_vec=level, clos_vec, d_to_cv)  %>%
       mutate(class="dend",
              sub_id=NA,
              ha=adj_deg(ha+180))
@@ -2368,7 +2472,36 @@ get_all_vectors <- function(D){
 }
 
 
-
+format_new_subdendrite_starts <- function(CENT_raw, nMD, main_vectors_full, last_pos){
+  
+  ## insert new ha cutoff here
+  CENT <- CENT_raw %>% as_tibble()
+  ## calc distance to closest main vector
+  ## i just do it by taking all pts and calc all dists
+  full_vecs_raw <- main_vectors_full[[nMD]]
+  full_vecs <- full_vecs_raw[c(2:length(full_vecs_raw))]
+  
+  closest_main_vec <- bind_rows(full_vecs) %>% 
+    mutate_all(.funs = as.numeric) %>%
+    mutate(dist=dist_pts(x,y,z,CENT$x, CENT$y, CENT$z)) %>%
+    .[which(.$dist==min(.$dist)),] 
+  
+  
+  info <- CENT %>% 
+    mutate(ha=get_ha(x,y, last_pos$x, last_pos$y),
+           va=get_va(dist_pts(x,y,z, last_pos$x, last_pos$y, last_pos$z), z, last_pos$z),
+           class="node",
+           sub_id=new_node_id,
+           clos_vec=closest_main_vec$level,
+           d_to_cv=closest_main_vec$dist
+    )
+  
+  full_coords <- bind_rows(last_pos,
+                           CENT)
+  
+  
+  return(list(info=info, full_coords=full_coords))
+}
 
 
 
