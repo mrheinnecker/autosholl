@@ -1,6 +1,6 @@
 ### this is the main script of autosholl
 ## load functions and dependencies
-source("/Users/Marco/git_repos/autosholl/new_fncts.R")
+source("/Users/Marco/git_repos/autosholl/fncts.R")
 load_dependencies()
 Rcpp::sourceCpp(file="c:/Users/Marco/git_repos/autosholl/cpp_fncts.cpp")
 ## load input files
@@ -40,33 +40,51 @@ inter$main_vectors_full=lapply(inter$main_vectors_raw, nth, 2)
 inter$main_vectors_df <- lapply(inter$main_vectors, bind_rows) 
 
 
-images$nosoma_image <- remove_soma(SOMA, inter$soma_radius, images$raw_image, opt$nr_orig, opt$nc_orig)
-images$rem_mainobj_image <- remove_main_dendrites(images$nosoma_image, inter$main_vectors, 
-                                                  inter$main_vectors_full, 30, opt$nr_orig, opt$nc_orig)
+images$noS_image <- remove_soma(SOMA, inter$soma_radius, images$raw_image, opt$nr_orig, opt$nc_orig)
+images$noS_noMD_image <- remove_main_dendrites(images$noS_image, 
+                                               inter$main_vectors, 
+                                               inter$main_vectors_full, 
+                                               opt$subd_detection_distance-opt$subd_detection_depth-1, 
+                                               opt$nr_orig, 
+                                               opt$nc_orig)
 
 
-images$bin_nosoma_image <- binarize_image(opt, inter, 
-                                          inter$n_main_dendrites, images$nosoma_image, 
-                                          inter$elongated_dendrites,80, F)
-images$bin_rem_mainobj_image <- binarize_image(opt, inter$n_main_dendrites, images$rem_mainobj_image, 80, T)
+images$bin_noS_image_p <- binarize_image(opt, inter, 
+                                          inter$n_main_dendrites, 
+                                          images$noS_image, 
+                                          inter$elongated_dendrites,80, F, "man")
 
 
-# writeTIFF(images$bin_nosoma_image, "f:/data_sholl_analysis/test/intermediate/screen_binary.tif")
+images$bin_noS_noMD_image <- binarize_image(opt, inter, 
+                                            inter$n_main_dendrites, 
+                                            images$noS_noMD_image, 
+                                            inter$elongated_dendrites, 80, T, "man")
 
-images$bin_nosoma_image <- readTIFF("f:/data_sholl_analysis/test/intermediate/binarized.tif", all=T)
+images$med_bin_noS_noMD_image <- apply_3d_median_filter(images$bin_noS_noMD_image, 2)
 
+
+ # writeTIFF(images$bin_noS_image_p, "f:/data_sholl_analysis/test/images/DR30_depth3/bin_noS.tif")
+ # writeTIFF(images$bin_noS_noMD_image, "f:/data_sholl_analysis/test/images/DR30_depth3/bin_noS_noMD.tif")
+ # writeTIFF(images$med_bin_noS_noMD_image, "f:/data_sholl_analysis/test/images/DR30_depth3/med_bin_noS_noMD.tif")
+# images$bin_nosoma_image <- readTIFF("f:/data_sholl_analysis/test/intermediate/binarized.tif", all=T)
+# images$bin_rem <- readTIFF(paste0("f:/data_sholl_analysis/test/binary/bin_90_25.tif"), all=T)
+# 
 
 MASTER <- lapply(1:inter$n_main_dendrites, find_subdendritic_starts, 
                  main_vectors=inter$main_vectors,
                  main_vectors_df=inter$main_vectors_df,
                  main_vectors_full=inter$main_vectors_full,
                  SOMA=SOMA,
-                 IMG=images$bin_nosoma_image,
+                 IMG_screen=images$med_bin_noS_noMD_image,
+                 IMG_adj=images$bin_noS_image_p,
                  soma_radius=inter$soma_radius,
-                 minPTS=15,
-                 EPS=3.5)
+                 minPTS=opt$subd_cluster_mpt,
+                 EPS=opt$subd_cluster_eps,
+                 det_rad=opt$subd_detection_distance,
+                 z_range=opt$subd_detection_vertical_range,
+                 depth=opt$subd_detection_depth)
 
-#export_structure(MASTER, inter$main_vectors, "f:/data_sholl_analysis/test/dendrites/cpp_try.csv")
+export_structure(MASTER, inter$main_vectors, "f:/data_sholl_analysis/test/dendrites/new_scoring_sytem4.csv")
 
 traced_MASTER <- lapply(1:inter$n_main_dendrites, trace_subdendrites, 
                         MASTER=MASTER,
