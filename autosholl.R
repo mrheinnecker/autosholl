@@ -84,11 +84,35 @@ MASTER <- lapply(1:inter$n_main_dendrites, find_subdendritic_starts,
                  z_range=opt$subd_detection_vertical_range,
                  depth=opt$subd_detection_depth)
 
-export_structure(MASTER, inter$main_vectors, "f:/data_sholl_analysis/test/dendrites/new_scoring_sytem4.csv")
+
+save(images, file="f:/data_sholl_analysis/test/images/images.RData")
+
+export_structure(MASTER, inter$main_vectors, "f:/data_sholl_analysis/test/dendrites/final_sectry.csv")
 
 traced_MASTER <- lapply(1:inter$n_main_dendrites, trace_subdendrites, 
+                        IMG=images$bin_noS_noMD_image,
                         MASTER=MASTER,
-                        main_vectors_df=main_vectors_df)
+                        main_vectors_df=inter$main_vectors_df,
+                        main_vectors_full=inter$main_vectors_full,
+                        EPS=opt$trace_cluster_eps,
+                        MPTS=opt$trace_cluster_mpt,
+                        INC=opt$trace_detection_depth,
+                        det_rad=opt$trace_detection_distance)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
