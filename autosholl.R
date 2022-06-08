@@ -8,6 +8,10 @@ files <- list.files("f:/data_sholl_analysis/single_soma", pattern = "*", full.na
 file <- files[1]
 ## three main objects are used... list of all images; global options; intermediate data
 images <- list(raw_image=readTIFF(file, all=T))
+
+load("f:/data_sholl_analysis/test/images/images.RData")
+
+
 opt <- set_options(images$raw_image)
 inter <- list()
 ## find all somata in the image
@@ -85,7 +89,10 @@ MASTER <- lapply(1:inter$n_main_dendrites, find_subdendritic_starts,
                  depth=opt$subd_detection_depth)
 
 
-save(images, file="f:/data_sholl_analysis/test/images/images.RData")
+#save(images, file="f:/data_sholl_analysis/test/images/images.RData")
+
+
+
 
 export_structure(MASTER, inter$main_vectors, "f:/data_sholl_analysis/test/dendrites/final_sectry.csv")
 

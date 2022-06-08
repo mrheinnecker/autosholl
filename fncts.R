@@ -36,7 +36,9 @@ set_options <- function(raw_image){
     trace_cluster_eps=sqrt(3),
     trace_cluster_mpt=17,
     trace_detection_depth=5,
-    trace_detection_distance = 12
+    trace_detection_distance = 12,
+    trace_rescore_dist=10,
+    trace_rescore_angle=40
     
   ) %>%
     return()
@@ -2856,9 +2858,10 @@ binarize_image <- function(opt, inter, n_main_dendrites, IMG,
 # MPTS=MPTS
 # INC=INC
 # det_rad=DR
-
+# RESC_DIST=opt$trace_rescore_dist
+# RESC_ANG=opt$trace_rescore_angle
 trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full, 
-                               IMG, EPS, MPTS, INC, det_rad){ ## main dendrites
+                               IMG, EPS, MPTS, INC, det_rad, RESC_DIST, RESC_ANG){ ## main dendrites
   
    # nMD <- 2
    # nND <- 1
@@ -2885,11 +2888,11 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
   nND <- 0
   n_processed <- 0
   #print(1)
-  #nND <- 2
-  #while(n_processed < length(MAIND)){ ## nodes
+  #nND <- 17
+  while(n_processed < length(MAIND)){ ## nodes
     
   ### nur main nodes:  
-  while(n_processed < 16){
+  #while(n_processed < 16){
     
       
     nND <- nND + 1
@@ -2943,7 +2946,7 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
           if(c>4){
             ha_cutoff <- NULL
             screening_angle <- 160
-            z_range <- 3
+            z_range <- 5
             #det_rad <- 15
             #INC <- 4
           } else if(SUBD_info$orient=="end"){
@@ -2953,7 +2956,7 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
             det_rad <- 20
           } else {
             screening_angle <- 180
-            z_range <- 3
+            z_range <- 5
             ha_cutoff <- NULL
             #det_rad <- 15
             #INC <- 4
@@ -2977,12 +2980,7 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
           
         
           centers <- find_subd_cluster_man(centers1, EPS, MPTS)
-        
-        #centers <- find_subd_cluster_man(centers1, 5, 8)
-        
-        
-        #  t3 <- Sys.time()
-        #  cat(paste("  ", round(t1-st, 2), round(t2-t1, 2), round(t3-t2, 2)))
+          
           if(length(centers)==0|c>20){
             ## no elongation detected
             abort=T
@@ -2990,7 +2988,90 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
             if(c==1){
               remove_dend <- T
             }
-          } else if(length(centers)==1){
+            only_one=F
+          } else if(length(centers)>1){
+            
+            if(c==1){
+              last_pos <- SUBD$full_coords[nrow(SUBD$full_coords),]
+            } else {
+              last_pos=as_tibble(last(coord_list))
+            }
+            
+            
+            df_centers <- bind_rows(centers) %>%
+              rowwise() %>%
+              mutate(dist=cppDistPts(x,y,z, last_pos$x, last_pos$y, last_pos$z),
+                     ha=cppGetHA(x,y,last_pos$x, last_pos$y)) %>%
+              ungroup() %>%
+              mutate(id=c(1:nrow(.)))
+            
+            dups <- lapply(df_centers$id, function(nC){
+              df_dist <- lapply(df_centers$id %>% .[which(!.==nC)],
+                                function(C){
+                                  d <- cppDistPts(centers[[nC]][["x"]],
+                                                    centers[[nC]][["y"]],
+                                                    centers[[nC]][["z"]],
+                                                    centers[[C]][["x"]],
+                                                    centers[[C]][["y"]],
+                                                    centers[[C]][["z"]])
+                                  
+                                  diff_ha=abs(df_centers[[which(df_centers$id==nC),"ha"]]-
+                                                df_centers[[which(df_centers$id==C),"ha"]])
+                                  
+                                  c(v1=min(nC, C), 
+                                    v2=max(nC, C), 
+                                    dist=d,
+                                    diff_ha=diff_ha) %>%
+                                    return()
+                                  
+                                }) %>%
+                bind_rows() %>%
+                return()
+            }) %>% unique() %>%
+              bind_rows() %>%
+              filter(dist<RESC_DIST&(diff_ha<RESC_ANG|diff_ha>(360-RESC_ANG)))
+            if(nrow(dups)>0){
+              
+           
+              remove <- apply(dups, 1, function(PAIR){
+                
+                df_centers %>%
+                  .[which(.$id %in% c(PAIR[["v1"]], PAIR[["v2"]])),] %>%
+                  .[which(!.$dist==max(.$dist)),] %>%
+                  pull(id) %>%
+                  return()
+              }) %>% unlist()
+              
+              keep <- df_centers %>%
+                filter(!id %in% remove) %>%
+                pull(id)
+                #.[[which(!df_centers$id %in% remove),"id"]]
+              
+              centers <- centers[keep]
+            }
+            
+            
+            if(length(centers)==1){
+              cat("\n    removed duplicated")
+            } else {
+              ## node detected
+              
+              ## check if its realy a node or just duplicated
+              ## calc distance and angle to master node
+              cat("\n    node")
+              node_detected <- T
+              abort <- T
+            }
+            
+            only_one <- ifelse(length(centers)==1, T, F)
+          } else {
+            only_one <- T
+            ## elongate... only one center
+          }
+            
+            
+            
+          if(only_one==T){
             ## subdendrite elongates
             
             elgt <- centers[[1]]
@@ -3019,13 +3100,7 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
               coord_list[[c]] <- elgt
               c <- c+1
             } 
-            
-          } else {
-            ## node detected
-            cat("\n    node")
-            node_detected <- T
-            abort <- T
-          }
+          } 
         }
       }
       
