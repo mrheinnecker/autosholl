@@ -897,7 +897,9 @@ assign_vectors_to_segments <- function(ELD, vector_pos, use_length, n_segments){
 #   return(c(x=x, y=y_ret))
 #   
 # }
-
+get_3d_single_index <- function(x,y,z, nr){
+  paste(z,get_single_index(x,y,nr), sep="_")
+}
 
 get_single_index <- function(x,y,nr){
   
@@ -1551,19 +1553,23 @@ screen_subdendrite_starts <- function(start, rel_z_layer, elgt_len, VEC, IMG){
 #   return(df_centers)
 # }
 
-#df <-centers1
+#df <-centers_rem
+
+# EPS <- 2
+# MPTS <- 33
 
 find_subd_cluster_man <- function(df, EPS, MPTS){
   df_filtered <- df %>% 
     .[which(.$i!=0),] %>%
-    select(x,y,z)
+    select(x,y,z) #
+  #ggplot(df_filtered, aes(x=x, y=-y,))+geom_point()+facet_wrap(~z)
   if(nrow(df_filtered)==0){return(NULL)} 
   df_clustered <- df_filtered %>% 
     ungroup() %>%
     mutate(c=fpc::dbscan(df_filtered, eps = EPS, MinPts = MPTS)$cluster) %>%
     .[which(.$c!=0),]
   if(nrow(df_clustered)==0){return(NULL)}
-  #ggplot(df_clustered %>% filter(c!=0), aes(x=x, y=z, color=as.character(c)))+ geom_point()
+  #ggplot(df_clustered, aes(x=x, y=-y,color=as.character(c)))+geom_point()+facet_wrap(~z)
   df_centers <- lapply(unique(df_clustered$c), function(CLUST){
     kmeans(df_clustered %>%  
              .[which(.$c==CLUST),] %>%
@@ -1574,6 +1580,52 @@ find_subd_cluster_man <- function(df, EPS, MPTS){
   })
   return(df_centers)
 }
+
+
+find_subd_cluster_man2 <- function(Z, EPS, MPTS, xs, ys){
+  
+  
+  
+  rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
+    .[between(., 1, length(IMG))] 
+  
+  centers1 <- screen_circular_new(det_rad, rel_z_layer,
+                                  INC, xs, ys, zs, ha, ha_cutoff, screening_angle, IMG) %>%
+    mutate(index=get_3d_single_index(x,y,z, nr_orig))
+
+  ## remove positions of other dendrites
+  centers_rem <- centers1 %>%
+    .[which(!.$index %in% c(all_points, recursive=T)),]
+  
+  
+  
+  df_filtered <- df %>% 
+    .[which(.$i!=0),] %>%
+    select(x,y,z) #
+  #ggplot(df_filtered, aes(x=x, y=-y,))+geom_point()+facet_wrap(~z)
+  if(nrow(df_filtered)==0){return(NULL)} 
+  
+  df_clustered <- df_filtered %>% 
+    ungroup() %>%
+    mutate(c=fpc::dbscan(df_filtered, eps = EPS, MinPts = MPTS)$cluster) %>%
+    .[which(.$c!=0),]%>%
+    rowwise() %>%
+    mutate(ha=cppGetHA(x,y, xs, ys))
+  if(nrow(df_clustered)==0){return(NULL)}
+  #ggplot(df_clustered, aes(x=x, y=-y,color=as.character(c)))+geom_point()+facet_wrap(~z)
+  df_centers <- lapply(unique(df_clustered$c), function(CLUST){
+    kmeans(df_clustered %>%  
+             .[which(.$c==CLUST),] %>%
+             select(x,y,z), 
+           centers=1)$centers %>%
+      round() %>%
+      set_names(nm=c("x","y","z"))
+  })
+  return(df_centers)
+}
+
+
+
 
 adj_deg <- function(GRAD){
   if(GRAD>360){
@@ -1672,37 +1724,62 @@ screen_circular <- function(det_rad, z_range, X, Y, Z, ha, IMG){
 }
 
 
+create_circle <- function(DET_RAD){
+  df_circ_x <- tibble(x=seq(-DET_RAD, DET_RAD, 1)) %>%
+    mutate(yp=sqrt(DET_RAD^2-x^2),
+           yn=-sqrt(DET_RAD^2-x^2)) %>%
+    gather(dir, y, -x)
+  
+  df_circ_y <- tibble(y=seq(-DET_RAD, DET_RAD, 1)) %>%
+    mutate(xp=sqrt(DET_RAD^2-y^2),
+           xn=-sqrt(DET_RAD^2-y^2)) %>%
+    gather(dir, x, -y)
+  
+  df_circ_full <- bind_rows(df_circ_x, df_circ_y) %>%
+    mutate_at(.vars = c("x", "y"), .funs = round) %>%
+    mutate(id=paste(x, y, sep="_")) %>%
+    filter(!duplicated(id)) %>%
+    return()
+}
+
+# 
 # X=xs
 # Y=ys
 # Z=zs
 
-screen_circular_new <- function(det_rad, rel_z_layer,INC, X, Y, Z, ha, ha_cutoff, screening_angle, IMG){
+
+
+
+screen_circular_new <- function(det_rad, rel_z_layer,bmin, bmax,
+                                INC, X, Y, Z, ha, ha_cutoff, screening_angle, IMG){
   
   #t0 <- Sys.time()
-  
-  
-  bmin=ha-0.5*screening_angle
-  bmax=ha+0.5*screening_angle
-  if(!is.null(ha_cutoff)){
-    if(ha<ha_cutoff){
-      if(bmax>ha_cutoff){
-        bmax <- round(ha_cutoff)
-      }
-      
-      if(bmin<ha_cutoff-180){
-        bmin <- round(ha_cutoff-180)
-      }
-    } else {
-      if(bmax>ha_cutoff+180){
-        bmax <- round(ha_cutoff+180)
-      }
-      
-      if(bmin<ha_cutoff){
-        bmin <- round(ha_cutoff)
-      }
-    }
-  }
-  
+  # if(is.null(screening_angle)){
+  #   bmin <- 0
+  #   bmax <- 360
+  # } else {
+  # 
+  #   bmin=ha-0.5*screening_angle
+  #   bmax=ha+0.5*screening_angle
+  #   if(!is.null(ha_cutoff)){
+  #     if(ha<ha_cutoff){
+  #       if(bmax>ha_cutoff){
+  #         bmax <- round(ha_cutoff)
+  #       }
+  #       
+  #       if(bmin<ha_cutoff-180){
+  #         bmin <- round(ha_cutoff-180)
+  #       }
+  #     } else {
+  #       if(bmax>ha_cutoff+180){
+  #         bmax <- round(ha_cutoff+180)
+  #       }
+  #       if(bmin<ha_cutoff){
+  #         bmin <- round(ha_cutoff)
+  #       }
+  #     }
+  #   }
+  # }
   # rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
   #   .[between(., 1, length(raw_image))]
   
@@ -2849,19 +2926,110 @@ binarize_image <- function(opt, inter, n_main_dendrites, IMG,
   return(binary_image)
 }
 
-# nMD=2
-# IMG=images$bin_noS_noMD_image
-# MASTER=MASTER
-# main_vectors_df=inter$main_vectors_df
-# main_vectors_full=inter$main_vectors_full
-# EPS=EPS
-# MPTS=MPTS
-# INC=INC
-# det_rad=DR
-# RESC_DIST=opt$trace_rescore_dist
-# RESC_ANG=opt$trace_rescore_angle
+rescore_traced_subnodes <- function(centers, last_pos, RESC_DIST, RESC_ANG){
+  
+  
+  
+  df_centers <- bind_rows(centers) %>%
+    rowwise() %>%
+    mutate(dist=cppDistPts(x,y,z, last_pos$x, last_pos$y, last_pos$z),
+           ha=cppGetHA(x,y,last_pos$x, last_pos$y)) %>%
+    ungroup() %>%
+    mutate(id=c(1:nrow(.)))
+  
+  dups <- lapply(df_centers$id, function(nC){
+    df_dist <- lapply(df_centers$id %>% .[which(!.==nC)],
+                      function(C){
+                        d <- cppDistPts(centers[[nC]][["x"]],
+                                        centers[[nC]][["y"]],
+                                        centers[[nC]][["z"]],
+                                        centers[[C]][["x"]],
+                                        centers[[C]][["y"]],
+                                        centers[[C]][["z"]])
+                        
+                        diff_ha=abs(df_centers[[which(df_centers$id==nC),"ha"]]-
+                                      df_centers[[which(df_centers$id==C),"ha"]])
+                        
+                        c(v1=min(nC, C), 
+                          v2=max(nC, C), 
+                          dist=d,
+                          diff_ha=diff_ha) %>%
+                          return()
+                        
+                      }) %>%
+      bind_rows() %>%
+      return()
+  }) %>% unique() %>%
+    bind_rows() %>%
+    #filter(dist<RESC_DIST&(diff_ha<RESC_ANG|diff_ha>(360-RESC_ANG)))
+    .[which(.$dist<RESC_DIST&(.$diff_ha<RESC_ANG|.$diff_ha>(360-RESC_ANG))),]
+  if(nrow(dups)>0){
+    
+    
+    remove <- apply(dups, 1, function(PAIR){
+      
+      df_centers %>%
+        .[which(.$id %in% c(PAIR[["v1"]], PAIR[["v2"]])),] %>%
+        .[which(!.$dist==max(.$dist)),] %>%
+        pull(id) %>%
+        return()
+    }) %>% unlist()
+    
+    keep <- df_centers %>%
+      filter(!id %in% remove) %>%
+      pull(id)
+    #.[[which(!df_centers$id %in% remove),"id"]]
+    
+    centers <- centers[keep]
+  }
+  
+  return(centers)
+  
+}
+
+get_circle_around_point <- function(P, RAD, nr_orig){
+  
+  df_circ_full <- create_circle(RAD)
+  
+  all_vox <- lapply(c(min(df_circ_full$x):max(df_circ_full$x)), function(X){
+    
+    all_x <- df_circ_full[which(df_circ_full$x==X),] #%>%
+    #arrange(y)
+    return(tibble(x=X, y=c(min(all_x$y):max(all_x$y))))
+    
+  }) %>% bind_rows() %>%
+    mutate(x=x+P[["x"]],
+           y=y+P[["y"]],
+           short=get_single_index(x,y,nr_orig)) %>%
+    pull(short) %>%
+    return()
+}
+
+get_sphere_around_point <- function(P, RAD, nr_orig, nz_orig){
+  
+  lapply(c((P[["z"]]-RAD):(P[["z"]]+RAD)) %>% .[which(between(., 1, nz_orig))], function(Z){
+    get_circle_around_point(P, RAD, nr_orig) %>% paste(Z, ., sep="_")
+  }) %>% c(recursive=T)
+  
+}
+
+# 
+nMD=2
+IMG=images$bin_noS_noMD_image
+MASTER=MASTER
+main_vectors_df=inter$main_vectors_df
+main_vectors_full=inter$main_vectors_full
+EPS_orig=EPS_orig
+MPTS_orig=MPTS_orig
+INC=INC_orig
+det_rad=DR_orig
+RESC_DIST=opt$trace_rescore_dist
+RESC_ANG=opt$trace_rescore_angle
+nr_orig=opt$nr_orig
+
+
 trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full, 
-                               IMG, EPS, MPTS, INC, det_rad, RESC_DIST, RESC_ANG){ ## main dendrites
+                               IMG, EPS_orig, MPTS_orig, INC, det_rad, RESC_DIST, RESC_ANG, nr_orig){ ## main dendrites
   
    # nMD <- 2
    # nND <- 1
@@ -2878,6 +3046,10 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
   MAIND <- MAIND[c(1:16)]
   MAIND[[16]]$subnodes <- list()
   MAIND[[16]]$subnode_full <- list()
+  
+  
+  
+  
   nNODE_orig <- length(MAIND)
   
   all_vectors <- lapply(MAIND, get_all_vectors) %>%
@@ -2885,10 +3057,19 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
   
   all_vectors_fv <- lapply(all_vectors, get_full_vector_voxels, IMG=IMG)
   
+  
+  all_points <- lapply(all_vectors, function(V){
+    return(list(V[1:3] %>% set_names(c("x", "y", "z")), V[4:6]%>% set_names(c("x", "y", "z"))))
+  }) %>% 
+    Reduce(function(x,y)append(x,y),.) %>%
+    unique() %>%
+    lapply(get_sphere_around_point, RAD=5, nr_orig=nr_orig, nz_orig=length(IMG))
+  
+  
   nND <- 0
   n_processed <- 0
   #print(1)
-  #nND <- 17
+  #nND <- 3
   while(n_processed < length(MAIND)){ ## nodes
     
   ### nur main nodes:  
@@ -2923,12 +3104,10 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
       ha <- adj_deg(SUBD_info$ha)
       ## only define ha_cutoff if node intersects with main vectors
       
-      # if(SUBD_info$d_to_cv>45){
-      #   ha_cutoff <- NULL
-      # } else {
-      #   ha_cutoff <- MV %>% 
-      #     filter(level==SUBD_info$clos_vec) %>% 
-      #     pull(ha)
+
+        # ha_cutoff <- MV %>%
+        #   filter(level==SUBD_info$clos_vec) %>%
+        #   pull(ha)
       # }
       
       
@@ -2937,138 +3116,264 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
       abort <- F
       node_detected <- F
       remove_dend <- F
+      z_cutoff <- 12
+      
       
       while(abort==F){ 
-
+      #for(i in c(1:3)){
           #print(3)
           #st <- Sys.time()
         cat(paste("\n    elgt step:",c))
-          if(c>4){
-            ha_cutoff <- NULL
-            screening_angle <- 160
-            z_range <- 5
-            #det_rad <- 15
-            #INC <- 4
-          } else if(SUBD_info$orient=="end"){
-            ha_cutoff <- NULL
-            screening_angle <- 180
-            z_range <- 5
-            det_rad <- 20
-          } else {
-            screening_angle <- 180
-            z_range <- 5
-            ha_cutoff <- NULL
-            #det_rad <- 15
-            #INC <- 4
-          }
+        if(SUBD_info$orient=="end"){
+          ha_cutoff <- NULL
+          screening_angle <- 180
+          z_range <- 5
+          det_rad <- 20
+          alt <- T
+        } else if(SUBD_info$orient=="side"&c==1){
+          screening_angle <- 220
+          z_range <- 8
+          ha_cutoff <- NULL
+          alt <- T
+        } else if(SUBD_info$orient=="elongated"&c==1){
+          screening_angle <- 130
+          z_range <- 5
+          ha_cutoff <- NULL
+        } else if(c<3){
+          ha_cutoff <- NULL
+          screening_angle <- 120
+          z_range <- 3
+          alt <- F
+        } else {
+          ha_cutoff <- NULL
+          screening_angle <- 120
+          z_range <- 3
+          alt <- F
+        }
         #for(i in 1:4){  
         # t1 <- Sys.time()
         
         Z <- round(zs+tan(cppdeg2rad(SUBD_info$va))*det_rad)
+        # if(Z>z_cutoff){
+        #   cat(paste("  Z:", Z))
+        #   Z <- z_cutoff
+        #   
+        # } else if(Z<-z_cutoff){
+        #   cat(paste("  Z:", Z))
+        #   Z <- -z_cutoff
+        #   
+        # }
+###########################################
         
-        rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
-          .[between(., 1, length(IMG))]
+        cluster_ok=F
+        DR <- det_rad
+        ZR <- z_range
+        MPTS <- MPTS_orig
+        EPS <- EPS_orig
+        while(cluster_ok==F){
         
-        centers1 <- screen_circular_new(det_rad, rel_z_layer,
-                                        INC, xs, ys, zs, ha, ha_cutoff, screening_angle, IMG) #%>%
-        #  t2 <- Sys.time()
-        # ggplot(centers1, aes(x=x, y=y))+geom_tile()
-        if(nrow(centers1)==0){
-          cat("\n    no elongation")
-          abort <- T
-        } else {
-          
-        
-          centers <- find_subd_cluster_man(centers1, EPS, MPTS)
-          
-          if(length(centers)==0|c>20){
-            ## no elongation detected
-            abort=T
-            cat("\n    stopped")
-            if(c==1){
-              remove_dend <- T
-            }
-            only_one=F
-          } else if(length(centers)>1){
-            
-            if(c==1){
-              last_pos <- SUBD$full_coords[nrow(SUBD$full_coords),]
-            } else {
-              last_pos=as_tibble(last(coord_list))
-            }
-            
-            
-            df_centers <- bind_rows(centers) %>%
-              rowwise() %>%
-              mutate(dist=cppDistPts(x,y,z, last_pos$x, last_pos$y, last_pos$z),
-                     ha=cppGetHA(x,y,last_pos$x, last_pos$y)) %>%
-              ungroup() %>%
-              mutate(id=c(1:nrow(.)))
-            
-            dups <- lapply(df_centers$id, function(nC){
-              df_dist <- lapply(df_centers$id %>% .[which(!.==nC)],
-                                function(C){
-                                  d <- cppDistPts(centers[[nC]][["x"]],
-                                                    centers[[nC]][["y"]],
-                                                    centers[[nC]][["z"]],
-                                                    centers[[C]][["x"]],
-                                                    centers[[C]][["y"]],
-                                                    centers[[C]][["z"]])
-                                  
-                                  diff_ha=abs(df_centers[[which(df_centers$id==nC),"ha"]]-
-                                                df_centers[[which(df_centers$id==C),"ha"]])
-                                  
-                                  c(v1=min(nC, C), 
-                                    v2=max(nC, C), 
-                                    dist=d,
-                                    diff_ha=diff_ha) %>%
-                                    return()
-                                  
-                                }) %>%
-                bind_rows() %>%
-                return()
-            }) %>% unique() %>%
-              bind_rows() %>%
-              filter(dist<RESC_DIST&(diff_ha<RESC_ANG|diff_ha>(360-RESC_ANG)))
-            if(nrow(dups)>0){
-              
-           
-              remove <- apply(dups, 1, function(PAIR){
-                
-                df_centers %>%
-                  .[which(.$id %in% c(PAIR[["v1"]], PAIR[["v2"]])),] %>%
-                  .[which(!.$dist==max(.$dist)),] %>%
-                  pull(id) %>%
-                  return()
-              }) %>% unlist()
-              
-              keep <- df_centers %>%
-                filter(!id %in% remove) %>%
-                pull(id)
-                #.[[which(!df_centers$id %in% remove),"id"]]
-              
-              centers <- centers[keep]
-            }
-            
-            
-            if(length(centers)==1){
-              cat("\n    removed duplicated")
-            } else {
-              ## node detected
-              
-              ## check if its realy a node or just duplicated
-              ## calc distance and angle to master node
-              cat("\n    node")
-              node_detected <- T
-              abort <- T
-            }
-            
-            only_one <- ifelse(length(centers)==1, T, F)
+          rel_z_layer <- seq(Z-round(ZR), Z+round(ZR), 1) %>%
+              .[between(., 1, length(IMG))]
+  
+          if(is.null(screening_angle)){
+            bmin <- 0
+            bmax <- 360
           } else {
-            only_one <- T
-            ## elongate... only one center
-          }
             
+            bmin=ha-0.5*screening_angle
+            bmax=ha+0.5*screening_angle
+            if(!is.null(ha_cutoff)){
+              if(ha<ha_cutoff){
+                if(bmax>ha_cutoff){
+                  bmax <- round(ha_cutoff)
+                }
+                
+                if(bmin<ha_cutoff-180){
+                  bmin <- round(ha_cutoff-180)
+                }
+              } else {
+                if(bmax>ha_cutoff+180){
+                  bmax <- round(ha_cutoff+180)
+                }
+                if(bmin<ha_cutoff){
+                  bmin <- round(ha_cutoff)
+                }
+              }
+            }
+          }
+          
+          
+          
+          
+          centers1 <- screen_circular_new(DR, rel_z_layer, bmin, bmax,
+                                            INC, xs, ys, zs, ha, ha_cutoff, screening_angle, IMG) #%>%
+          if(nrow(centers1)==0){
+            centers2 <- NULL
+            cluster_ok <- T
+          } else {
+            
+            
+              ## remove positions of other dendrites
+            centers_rem <- centers1 %>%
+              mutate(index=get_3d_single_index(x,y,z, nr_orig)) %>%
+                  .[which(!.$index %in% c(all_points, recursive=T)),] 
+            if(nrow(centers_rem)==0){
+              centers2 <- NULL
+              cluster_ok <- T
+            } else {
+              
+            
+              df_filtered <- centers_rem %>% 
+                .[which(.$i!=0),] %>%
+                select(x,y,z) #
+            #ggplot(df_filtered, aes(x=x, y=-y,))+geom_point()+facet_wrap(~z)
+              if(nrow(df_filtered)==0){
+                centers2 <- NULL
+                cluster_ok <- T
+              } else {
+                
+                df_clustered_raw <- df_filtered %>% 
+                  ungroup() %>%
+                  mutate(c=fpc::dbscan(df_filtered, eps = EPS, MinPts = MPTS)$cluster) %>%
+                  #mutate(c=fpc::dbscan(df_filtered, eps = sqrt(3), MinPts = 27)$cluster) %>%
+                  .[which(.$c!=0),] #%>%
+                
+                if(nrow(df_clustered_raw)==0){
+                  centers2 <- NULL
+                  cluster_ok <- T
+                } else {
+                
+                  df_clustered <- df_clustered_raw %>%
+                    rowwise() %>%
+                    mutate(ha_man=adj_deg(cppGetHA(x,y, xs, ys)-bmin))  
+                  #ggplot(df_clustered, aes(x=x, y=-y,color=as.character(c)))+geom_point()+facet_wrap(~z)
+                  
+                  if(nrow(df_clustered)==0){
+                    centers2 <- NULL
+                    cluster_ok <- T
+                  } else {
+                    
+                    ## check if clusters are ok:
+                    spreading <- lapply(unique(df_clustered$c), function(CLUST){
+                      clu <- df_clustered %>%  
+                        .[which(.$c==CLUST),] #%>%
+                      
+                      mn_ha <- min(clu$ha_man)
+                      mx_ha <- max(clu$ha_man)
+                      if(abs(mn_ha-mx_ha)>140){
+                          return(1)
+                      } else {
+                          return(NULL)
+                      } 
+                      
+                    }) %>% compact()
+      
+                  if(length(spreading)==0){
+                    cluster_ok <- T
+                  } else {
+                    DR <- DR+3
+                    ZR <- ZR+0.2
+                    #MPTS <- MPTS+4
+                  }
+                  
+                }
+                
+                  centers2 <- lapply(unique(df_clustered$c), function(CLUST){
+                      kmeans(df_clustered %>%  
+                             .[which(.$c==CLUST),] %>%
+                             select(x,y,z), 
+                           centers=1)$centers %>%
+                      round() %>%
+                      set_names(nm=c("x","y","z"))
+                  })  
+                } 
+              }
+              if(cluster_ok==F){
+                cat("  - cluster not valid")
+              }
+            }
+          }
+        }        
+
+        #ggplot(df_clustered, aes(x=x, y=-y,color=as.character(c)))+geom_point()+facet_wrap(~z)
+      
+        
+        
+        
+        
+        
+        
+#############################################
+        
+        ## we need this while loop if no good clusters are found to adjust the screening parameters
+        # cluster_ok <- F
+        # cc <- 1
+        # while(cluster_ok==F&cc<3){
+        # cc <- cc+1
+          # 
+
+          
+            #centers2 <- find_subd_cluster_man(centers_rem, EPS, MPTS, alt)
+            
+            if(length(centers2)==0|c>20){
+              ## no elongation detected
+              abort=T
+              cat("\n    stopped")
+              if(c==1){
+                remove_dend <- T
+              }
+              only_one=F
+            } else if(length(centers2)>1){
+              
+              if(c==1){
+                last_pos <- SUBD$full_coords[nrow(SUBD$full_coords),]
+              } else {
+                last_pos=as_tibble(last(coord_list))
+              }
+              
+              
+            centers <- rescore_traced_subnodes(centers2, last_pos, RESC_DIST, RESC_ANG)
+              
+              
+              if(length(centers)==1){
+                cat("\n    removed duplicated")
+              } else {
+                ## node detected
+                
+                ## check if its realy a node or just duplicated
+                ## calc distance and angle to master node
+                cat("\n    node")
+                node_detected <- T
+                abort <- T
+              }
+              
+              only_one <- ifelse(length(centers)==1, T, F)
+            } else {
+              only_one <- T
+              centers <- centers2
+              ## elongate... only one center
+            }          
+          
+            
+            vox_to_add <- lapply(centers, get_sphere_around_point, RAD=5, nr_orig=nr_orig, nz_orig=length(IMG))
+          
+            
+            all_points <- append(all_points, vox_to_add)
+        #     if(alt==T&nrow(centers)>1){
+        #       cluster_ok <- F
+        #       det_rad <- det_rad
+        #       z_range <- z_range+1
+        #     } else {
+        #       cluster_ok <- T
+        #     }
+        #     
+        # } ## while for cluster ok
+        
+
+           
+          
+          
+           
             
             
           if(only_one==T){
@@ -3101,7 +3406,7 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
               c <- c+1
             } 
           } 
-        }
+        #}
       }
       
       if(node_detected==T){
@@ -3171,6 +3476,29 @@ trace_subdendrites <- function(nMD, MASTER, main_vectors_df, main_vectors_full,
                          pos=NODE$pos,
                          subnode_full=new_SUBN_list,
                          subdend_full=new_SUBD_list)
+    
+    ## add new poits to full point list
+    # snl <- lapply(new_SUBN_list, function(N){
+    #   return(N[["full_coords"]])
+    # }) %>%
+    #   bind_rows()
+    # 
+    # sdl <- lapply(new_SUBD_list, function(N){
+    #   return(N[["full_coords"]])
+    # }) %>%
+    #   bind_rows()
+    # 
+    # full <- bind_rows(snl, sdl)
+    # 
+    # if(nrow(full)!=0){
+    #       vox_to_add <- apply(full, 1, 
+    #       get_sphere_around_point, RAD=5, nr_orig=nr_orig, nz_orig=length(IMG),
+    #       simplify=F)
+    # 
+    # all_points <- append(all_points, vox_to_add)
+    # } 
+    
+
     
     all_vectors_fv <- append(all_vectors_fv, additional_vectors)
     

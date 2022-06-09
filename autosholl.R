@@ -7,7 +7,7 @@ Rcpp::sourceCpp(file="c:/Users/Marco/git_repos/autosholl/cpp_fncts.cpp")
 files <- list.files("f:/data_sholl_analysis/single_soma", pattern = "*", full.names = T)
 file <- files[1]
 ## three main objects are used... list of all images; global options; intermediate data
-images <- list(raw_image=readTIFF(file, all=T))
+#images <- list(raw_image=readTIFF(file, all=T))
 
 load("f:/data_sholl_analysis/test/images/images.RData")
 
