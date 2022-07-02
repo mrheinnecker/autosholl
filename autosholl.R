@@ -96,34 +96,23 @@ MASTER <- lapply(1:inter$n_main_dendrites, find_subdendritic_starts_new,
 
 
 
-inter$all_vectors <- lapply(MASTER, function(MAIND){
-  lapply(MAIND, get_all_vectors) %>%
-  Reduce(function(x,y)append(x,y),.)
-})
-inter$all_vectors_fv <- lapply(inter$all_vectors, function(AV){
-  print(1)
-  lapply(AV, get_full_vector_voxels, IMG=images$bin_noS_noMD_image)
-})
+inter$all_vectors <- lapply(MASTER, extract_all_vectors) 
+# inter$all_vectors_fv <- lapply(inter$all_vectors, function(AV){
+#   #print(1)
+#   lapply(AV, get_full_vector_voxels, IMG=images$bin_noS_noMD_image)
+# })
   
   
 #AVF <- inter$all_vectors_fv[3]
 
-inter$all_points <- lapply(inter$all_vectors_fv, function(AVF){
-  #print(bind_rows(AVF))
-  print(2)
-  if(length(AVF)==0){return(NULL)}
-    get_all_vector_speheres(bind_rows(AVF), opt$trace_dend_cross_radius_vertical, 
-                                            opt$trace_dend_cross_radius_horizontal, 
-                                            opt$nr_orig, 
-                                      images$bin_noS_noMD_image)
-})
+inter$all_points <- lapply(inter$all_vectors, assign_vector_voxels)
   
 
 
 
 
 traced_MASTER <- lapply(1:inter$n_main_dendrites, function(n){
-  
+  cat(paste("\nmain-dendrite:", n))
      trace_subdendrites( 
                         IMG=images$bin_noS_noMD_image,
                         MAIND=MASTER[[n]],
@@ -131,7 +120,7 @@ traced_MASTER <- lapply(1:inter$n_main_dendrites, function(n){
                         main_vectors_full=inter$main_vectors_full[[n]],
                         
                         all_vectors = inter$all_vectors[[n]], 
-                        all_vectors_fv =inter$all_vectors_fv[[n]] %>% bind_rows(), 
+                        #all_vectors_fv =inter$all_vectors_fv[[n]] %>% bind_rows(), 
                         all_points =inter$all_points[[n]],
                         
                         EPS_orig=opt$trace_cluster_eps,
@@ -151,10 +140,10 @@ traced_MASTER <- lapply(1:inter$n_main_dendrites, function(n){
                         
                      
 ## exporting
-run_dir <- "f:/data_sholl_analysis/test/runs/010722_01"
+run_dir <- "f:/data_sholl_analysis/test/runs/020722_01"
 dir.create(run_dir)
 export_structure(traced_MASTER, inter$main_vectors,
-                 file.path(run_dir, "dendrites_full_new.csv"))
+                 file.path(run_dir, "dendrites_full_spheres.csv"))
 
 
 
