@@ -3237,8 +3237,13 @@ get_all_vector_speheres <- function(all_vectors_fv_comb, RADv, RADh, nr_orig, IM
   all_points <- list()
   
   nra <- nrow(all_vectors_fv_comb)
-  cat(paste("       assigning", nra, "pts"))
-  for(nPT in 1:nra){
+  
+  
+  
+  steps <- seq(1, nra, round(RADh/2)) %>% c(.,nra) %>% unique()
+  
+  cat(paste("       assigning", nra, "pts (", length(steps), "iterations)"))
+  for(nPT in steps){
     
     #print(nPT)
     
@@ -3309,7 +3314,7 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
   while(n_processed < length(MAIND)){ ## nodes
     
   ### nur main nodes:  
-  #while(n_processed < 30){
+  #while(n_processed < 38){
     
       
     nND <- nND + 1
@@ -3324,7 +3329,7 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
     new_SUBD_list <- list()
     new_SUBN_list <- NODE$subnode_full
     #print(2)
-    #nSD <- 3
+    #nSD <- 1
     for(nSD in 1:length(SUBD_list)){
       
       cat(paste("\n    subd:", nSD, "of", length(SUBD_list)))
@@ -3452,7 +3457,7 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
               mutate(index=get_3d_single_index(x,y,z, nr_orig)) %>%
               .[which(!.$index %in% all_points),]
             
-            ggplot(centers_rem, aes(x=x, y=-y))+geom_point()+facet_wrap(~z)
+            #ggplot(centers_rem, aes(x=x, y=-y))+geom_point()+facet_wrap(~z)
             
             if(nrow(centers_rem)==0){
               centers2 <- NULL
@@ -3619,9 +3624,9 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
               overlap <- red_vec %>% rowwise() %>%
                 #bind_rows() %>%
                 mutate(dist=cppDistPts(x,y,z,elgt[["x"]],elgt[["y"]],elgt[["z"]])) %>%
-                #.[which(.$dist<20),] %>%
+                #.[which(.$dist<100),] #%>%
                 mutate(xyd=cppDistPts(x,y,0,elgt[["x"]],elgt[["y"]],0),
-                       zd=abs(zs-elgt[["z"]]),
+                       zd=abs(z-elgt[["z"]]),
                        score=sqrt(xyd^2+(0.125*zd^2))) %>%
                 .[which(.$score<10),]
               
@@ -3630,7 +3635,8 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
               if(nrow(overlap)>0){
                 ovfin <- overlap %>% #rename(vha=ha) %>% rowwise() %>%
                   mutate(dha=abs(ha-nha),
-                         diff_ha=ifelse(dha>180, 360-dha, dha)) %>%
+                         dha2=ifelse(dha>180, 360-dha, dha),
+                         diff_ha=ifelse(dha2>90, abs(180-dha2), dha2)) %>%
                   .[which(.$diff_ha<45),]
               } else {
                 ovfin <- overlap
@@ -3648,43 +3654,7 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
                 c <- c+1
               } 
             } 
-           
-          
-          
-           
-            
-           #### the old one ... probably not necesarry 
-          # if(only_one==T){
-          #   ## subdendrite elongates
-          #   
-          #   elgt <- centers[[1]]
-          #   dist <- cppDistPts(elgt[["x"]], elgt[["y"]], elgt[["z"]], xs, ys,zs)
-          #   ha <- cppGetHA(elgt[["x"]], elgt[["y"]], xs,ys)
-          #   va <- cppGetVA(dist, 
-          #                elgt[["z"]], zs)
-          #   
-          #   ## check if elongation overlaps with already present dendrite
-          #   vox <- elongate_line_full(IMG, ha, va, xs, ys, zs, round(dist)) %>%
-          #     mutate(id=paste(x,y, sep="_")) %>%
-          #     pull(id)
-          #   
-          #   overlap <- all_vectors_fv %>%
-          #     bind_rows() %>%
-          #     mutate(id=paste(x,y, sep="_")) %>%
-          #     filter(id %in% vox)
-          #   
-          #   if(nrow(overlap)>0&c>1){
-          #     abort <- T
-          #     cat("\n    crossed")
-          #   } else {
-          #     xs <- elgt[["x"]]
-          #     ys <- elgt[["y"]]
-          #     zs <- elgt[["z"]]    
-          #     coord_list[[c]] <- elgt
-          #     c <- c+1
-          #   } 
-          # } 
-        #}
+
       } ## end of elongations (main while loop)
 
           
@@ -3734,7 +3704,24 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
         
         #additional_vectors <- get_all_vectors(new_NODE) %>% lapply(get_full_vector_voxels, IMG=IMG)
         
-        new_vectors <- get_all_vectors(new_NODE)
+        #new_vectors <- get_all_vectors(new_NODE)
+        
+        
+        if(length(coord_list)>1){
+          new_vectors <- lapply(2:length(coord_list), function(V){
+            
+            tibble(xe=coord_list[[V]][["x"]],
+                   ye=coord_list[[V]][["y"]],
+                   ze=coord_list[[V]][["z"]],
+                   xs=coord_list[[V-1]][["x"]],
+                   ys=coord_list[[V-1]][["y"]],
+                   zs=coord_list[[V-1]][["z"]])
+            
+          }) %>% append(get_all_vectors(new_NODE))
+        } else {
+          new_vectors <- get_all_vectors(new_NODE)
+        }
+        
         
         new_red_vec <- new_vectors %>%
           lapply(function(V) {

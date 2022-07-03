@@ -140,10 +140,10 @@ traced_MASTER <- lapply(1:inter$n_main_dendrites, function(n){
                         
                      
 ## exporting
-run_dir <- "f:/data_sholl_analysis/test/runs/020722_01"
+run_dir <- "f:/data_sholl_analysis/test/runs/030722_01"
 dir.create(run_dir)
 export_structure(traced_MASTER, inter$main_vectors,
-                 file.path(run_dir, "dendrites_full_spheres.csv"))
+                 file.path(run_dir, "dendrites_final.csv"))
 
 
 
