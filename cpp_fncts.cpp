@@ -27,6 +27,56 @@ double cpprad2deg(double rad) {
   return deg;
 }
 
+// [[Rcpp::export]]
+int cppGetSingleIndex(int x, int y, int nr) {
+  int i = nr*(x-1)+y;
+  return i;
+}
+// [[Rcpp::export]]
+double cppMODULO(int i, int nr) {
+  int y = i%nr;
+  return y;
+}
+
+
+
+
+// NumericVector cppGetCircle(int r, int x, int y, int nr) {
+//   
+//   for (int i = 0; i < 5; i++) {
+//     cout << i << "\n";
+//   }
+//   
+// }
+// 
+// lapply(c(-r:r), function(X){
+//   y=sqrt(r^2-X^2)
+//   bottom <- round(VP[["y"]]-y)
+//   top <- round(VP[["y"]]+y)
+//   lapply(c(bottom:top), cppGetSingleIndex, x=X+round(VP[["x"]]), nr=nr_orig) %>%
+//     return()
+// })
+
+
+
+// [[Rcpp::export]]
+NumericVector cppGetXYIndex(int i, int nr) {
+  int y = i%nr;
+  if(y == 0){
+    int yret = nr;
+    int x = (i-y)/nr;
+    NumericVector v =
+      NumericVector::create(Named("x",x) , Named("y")=yret);
+    return v;
+  }
+  else {
+    int yret = y;
+    int x = (i-y)/nr+1;
+    NumericVector v =
+      NumericVector::create(Named("x",x), Named("y")=yret);
+    return v;
+  }
+}
 
 // [[Rcpp::export]]
 #include <cmath>

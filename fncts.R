@@ -1,5 +1,5 @@
 load_dependencies <- function(){
-   
+  
   library(tiff)
   library(tidyverse)
   library(gridExtra)
@@ -12,7 +12,7 @@ load_dependencies <- function(){
 
 
 set_options <- function(raw_image){
-
+  
   
   
   list(
@@ -330,7 +330,8 @@ elongate_dendrite <- function(DENDRITE_raw,
   steps <- 10
   
   
-  cat(paste("\ndendrite number:",DENDRITE_raw[["dendrite_id"]]))
+  #cat(paste("\n  dendrite number:",DENDRITE_raw[["dendrite_id"]],"\n  --"))
+  cat("\n  --")
   DENDRITE <- DENDRITE_raw %>% as.numeric() %>% 
     set_names(nm=names(DENDRITE_raw))
   
@@ -346,7 +347,8 @@ elongate_dendrite <- function(DENDRITE_raw,
   knot_list[[2]] <- next_pos
   c <- 2
   while(c<3|sum(knot_list[[c-1]][1:3]==knot_list[[c]][1:3])!=3){
-    cat(paste("\n  elongation step:", c-1))
+    #cat(paste("\n  elongation step:", c-1))
+    cat("-")
     st <- Sys.time()
     raw_dendrite <- screen_for_dendrite_elongation(next_pos, 
                                                    vertical_subdivisions, 
@@ -362,6 +364,7 @@ elongate_dendrite <- function(DENDRITE_raw,
     knot_list[[c]] <- next_pos %>% set_names(c("x","y","z", "h_angle", "v_angle"))
     #print(Sys.time()-st)
   }
+  cat(paste("|", c))
   return(append(list(c(x=round(SOMA$x), y=round(SOMA$y), z=round(SOMA$z), h_angle=DENDRITE[["h_angle"]], v_angle=0)),knot_list[3:c-1]))
   #return(knot_list[3:c-1])
   
@@ -405,7 +408,7 @@ find_dendritic_start_sites <- function(SOMA, IMG){
   }) %>% 
     bind_rows()
   
-  print("screened for dendrites")
+  #cat("\nscreened for dendrites")
   
   soma_radius <- mn %>%
     group_by(deg) %>%
@@ -438,19 +441,19 @@ find_dendritic_start_sites <- function(SOMA, IMG){
   }
   
   
-  control_plot_density <- tibble(x=dens_func$x,
-                                 y=dens_func$y) %>%
-    ggplot(aes(x=x, y=y))+
-    geom_line()+
-    geom_segment(data=relevant_maxima, linetype=5,
-                 aes(x=x, xend=x, y=0, yend=y))+
-    geom_text(data=relevant_maxima, aes(label=round(x), x=x, y=y),
-              vjust=0, color="red")+
-    geom_segment(data=tibble(x=c(0, 360)),
-                 inherit.aes=F,
-                 aes(x=x, xend=x), y=0, yend=1, color="red")
+  # control_plot_density <- tibble(x=dens_func$x,
+  #                                y=dens_func$y) %>%
+  #   ggplot(aes(x=x, y=y))+
+  #   geom_line()+
+  #   geom_segment(data=relevant_maxima, linetype=5,
+  #                aes(x=x, xend=x, y=0, yend=y))+
+  #   geom_text(data=relevant_maxima, aes(label=round(x), x=x, y=y),
+  #             vjust=0, color="red")+
+  #   geom_segment(data=tibble(x=c(0, 360)),
+  #                inherit.aes=F,
+  #                aes(x=x, xend=x), y=0, yend=1, color="red")
   #coord_cartesian(xlim=c(0,360))
-  print("maxima detected")
+  #print("maxima detected")
   
   rescored_maxima <- lapply(relevant_maxima$x, function(GRAD){
     
@@ -469,33 +472,33 @@ find_dendritic_start_sites <- function(SOMA, IMG){
     bind_rows() #%>%
   #mutate(tier_id=)
   
-  print("dendrites adjusted")
+  #print("dendrites adjusted")
   
-  control_plot <- ggplot(mn, aes(x=x, y=y, 
-                                 fill=SOMA[["z"]]
-                                 #fill=deg %>% factor(levels=unique(mn$deg))
-  ))+
-    geom_tile(show.legend = F)+
-    geom_tile(inherit.aes=F,
-              data=rescored_maxima, aes(x=x, y=y), fill="black", height=2, width=4)+
-    geom_text(inherit.aes=F,
-              data=rescored_maxima, aes(x=x, y=y, label=round(h_angle)), color="white")
+  # control_plot <- ggplot(mn, aes(x=x, y=y, 
+  #                                fill=SOMA[["z"]]
+  #                                #fill=deg %>% factor(levels=unique(mn$deg))
+  # ))+
+  #   geom_tile(show.legend = F)+
+  #   geom_tile(inherit.aes=F,
+  #             data=rescored_maxima, aes(x=x, y=y), fill="black", height=2, width=4)+
+  #   geom_text(inherit.aes=F,
+  #             data=rescored_maxima, aes(x=x, y=y, label=round(h_angle)), color="white")
   
   
-  pdf(file = paste0("c:/Users/Marco/Dropbox/Studium/Master/Praktikum_Mueller/",
-                    file %>% str_split("/") %>% unlist() %>% last() %>% str_replace(".tif", ""),
-                    ".pdf"),
-      width = (0.1*abs(min(mn$x)-max(mn$x))), height=0.2*abs(min(mn$y)-max(mn$y)))
-  grid.arrange(
-    plot_grid(control_plot,
-              control_plot_density,
-              align="v",
-              ncol=1,
-              rel_heights = c(1,1))
-  )
-  dev.off()
+  # pdf(file = paste0("c:/Users/Marco/Dropbox/Studium/Master/Praktikum_Mueller/",
+  #                   file %>% str_split("/") %>% unlist() %>% last() %>% str_replace(".tif", ""),
+  #                   ".pdf"),
+  #     width = (0.1*abs(min(mn$x)-max(mn$x))), height=0.2*abs(min(mn$y)-max(mn$y)))
+  # grid.arrange(
+  #   plot_grid(control_plot,
+  #             control_plot_density,
+  #             align="v",
+  #             ncol=1,
+  #             rel_heights = c(1,1))
+  # )
+  # dev.off()
   
-  return(list(rescored_maxima, control_plot, soma_radius))
+  return(list(rescored_maxima, soma_radius))
   
 }
 
@@ -559,9 +562,6 @@ get_somata <- function(cube_size, r, deg_step ,raw_image){
     median() %>%
     round()
   
-  
-  
-  
   return(xy_soma)
 }
 
@@ -616,12 +616,12 @@ test_segmentation <- function(sl, raw_image, file_name, soma_reg){
 
 #nosoma_image <- raw_image
 #VOX <- sl[[1]]
+
+#nosoma_image <- IMG
+
 bi2 <- function(sl, nosoma_image){
-  
+  #t0 <- Sys.time()
   full_cutoffs <- lapply(sl, function(VOX){
-    #print(1)
-    
-    #cat(paste("\nfind cutoff:", VOX))
     
     all_vox_raw <- lapply(1:length(nosoma_image), function(L){
       
@@ -635,15 +635,6 @@ bi2 <- function(sl, nosoma_image){
     all_vox <- all_vox_raw[all_vox_raw!=0]
     
     dens_func <- density(all_vox, bw=0.001) 
-    
-    #ggplot(tibble(x=dens_func$x,y=dens_func$y), aes(x=x, y=y))+ geom_line()
-    
-    # all_local_extreme <- get_minmax(dens_func) %>%
-    #   filter(x<0.95)
-    # 
-    # loc_ex <- all_local_extreme[which(all_local_extreme$y==max(all_local_extreme$y)),]$x
-    #mn <- min(all_vox)
-    #mx <- max(all_vox)
     
     df <- tibble(x=dens_func$x, y=dens_func$y, d1=c(0, diff(dens_func$y)))%>%
       filter(between(x, 0.05, 0.95))
@@ -664,25 +655,25 @@ bi2 <- function(sl, nosoma_image){
   
   
   new_image <- nosoma_image
-  
-  
+  #st1 <- Sys.time()
   for(i in 1:length(full_cutoffs)){
-    #cat(paste("\n  ", i))
+    #t0 <- Sys.time()
     cutoff <- full_cutoffs[[i]]
     VOX <- sl[[i]]
     for(l in 1:length(new_image)){
-      #print(l)
-      #cutoff <- cutoffs[[l]]
       new_image[[l]][VOX][new_image[[l]][VOX]>=cutoff] <- 1
       new_image[[l]][VOX][new_image[[l]][VOX]<cutoff] <- 0
-      new_image[[l]] <- matrix(new_image[[l]], nrow = 1040)
+      #new_image[[l]] <- matrix(new_image[[l]], nrow = 1040)
     }
-    
+    #cat(paste("\n  ", i, Sys.time()-t0))
   }
-  
-  #writeTIFF(new_image, file_name)
+  # st2 <- Sys.time()
+  # print(st2-st1)
   return(new_image)
 }
+
+
+#writeTIFF(new_image, "f:/data_sholl_analysis/test/runs/testbin.tif")
 
 bi3 <- function(sl, nosoma_image, QNT){
   
@@ -1013,7 +1004,7 @@ create_segment <- function(xs, xe, cof, line, nr, nc, bd, sdir, direction, nr_or
 
 
 create_raster <- function(nELD, avs, borders_vox_raw, selection_vector, elongated_dendrites,nr_orig, nc_orig, process_full){
-  cat(paste("dendrite:", nELD))
+  #  cat(paste("dendrite:", nELD))
   ################################################################################
   ######################## defining basic elements ###############################    
   ################################################################################       
@@ -1086,7 +1077,7 @@ create_raster <- function(nELD, avs, borders_vox_raw, selection_vector, elongate
     
     #print(n)
     
-    cat(paste("\n  x_segment:",n))
+    # cat(paste("\n  x_segment:",n))
     ################################################################################
     ################### set x and y variables for segment ##########################    
     ################################################################################ 
@@ -1145,7 +1136,7 @@ create_raster <- function(nELD, avs, borders_vox_raw, selection_vector, elongate
       
       segment_count <- segment_count+1
       segment_list[[segment_count]] <- all_vox_top[[1]]
-      cat(paste("\n    top:", segment_count))
+      #cat(paste("\n    top:", segment_count))
     }
     
     start_list_bottom <- list()
@@ -1171,7 +1162,7 @@ create_raster <- function(nELD, avs, borders_vox_raw, selection_vector, elongate
       line_list_bottom[[n_bottom]] <- all_vox_bottom[[2]]
       
       segment_count <- segment_count+1
-      cat(paste("\n    bottom:", segment_count))
+      #cat(paste("\n    bottom:", segment_count))
       segment_list[[segment_count]] <- all_vox_bottom[[1]]
     }       
     #print(4)
@@ -1291,7 +1282,7 @@ remove_main_dendrites_old <- function(IMG, main_vectors, main_vectors_full, rem_
 }
 
 
-remove_main_dendrites <- function(IMG, main_vectors, main_vectors_full, rem_rad, nr_orig, nc_orig){
+remove_main_dendrites_old3 <- function(IMG, main_vectors, main_vectors_full, rem_rad, nr_orig, nc_orig){
   
   comb_main_dend <- lapply(1:length(main_vectors), function(n){
     full_vecs <- main_vectors_full[[n]]
@@ -1302,49 +1293,45 @@ remove_main_dendrites <- function(IMG, main_vectors, main_vectors_full, rem_rad,
   
   rem_IMG <- lapply(1:length(IMG), function(n){
     print(n)
+    t0 <- Sys.time()
     all_vox <- apply(comb_main_dend, 1, function(VP){
-     # r <- rem_rad+abs(round(VP[["z"]])-n)
       r <- round(rem_rad+0.0175*(abs(round(VP[["z"]])-n))^2)
-        circ <- lapply(c(-r:r), function(X){
-          y=sqrt(r^2-X^2)
-          bottom <- round(VP[["y"]]-y)
-          top <- round(VP[["y"]]+y)
-          lapply(c(bottom:top), get_single_index, x=X+round(VP[["x"]]), nr=nr_orig) %>%
-            return()
-        }) %>% unlist()    
-    
+      circ <- lapply(c(-r:r), function(X){
+        y=sqrt(r^2-X^2)
+        bottom <- round(VP[["y"]]-y)
+        top <- round(VP[["y"]]+y)
+        lapply(c(bottom:top), get_single_index, x=X+round(VP[["x"]]), nr=nr_orig) %>%
+          return()
+      }) %>% unlist()
     }) %>%
       c(recursive=T) %>%
       unique() 
     LAYER <- IMG[[n]]
-  LAYER[all_vox] <- 0
-  return(LAYER)
+    LAYER[all_vox] <- 0
+    cat(Sys.time()-t0)
+    return(LAYER)
   })
-  
   return(rem_IMG)
-  
-  #writeTIFF(rem_IMG, "f:/data_sholl_analysis/test/images/removed_objects/new_rem_obj.tif")
-  
   
 }
 
-    
-    # 
-    # c <- c(all_vox, recursive=T) %>% unique()
-    # 
-    # 
-    # df <- lapply(c, get_xy_index, nr=1040) %>%
-    #   bind_rows()
-    # 
-    # 
-    # ggplot(df, aes(x=x, y=y))+geom_tile()
-    # c <- lapply(1:64, function(n){
-    # 
-    #   r <- rem_rad+0.0175*(abs(round(20)-n))^2
-    #   return(c(x=n, y=r))
-    # }) %>% bind_rows()
-    # 
-    # ggplot(c, aes(x=x, y=y))+geom_point()
+
+# 
+# c <- c(all_vox, recursive=T) %>% unique()
+# 
+# 
+# df <- lapply(c, get_xy_index, nr=1040) %>%
+#   bind_rows()
+# 
+# 
+# ggplot(df, aes(x=x, y=y))+geom_tile()
+# c <- lapply(1:64, function(n){
+# 
+#   r <- rem_rad+0.0175*(abs(round(20)-n))^2
+#   return(c(x=n, y=r))
+# }) %>% bind_rows()
+# 
+# ggplot(c, aes(x=x, y=y))+geom_point()
 
 remove_main_dendrites_old2 <- function(IMG, main_vectors, main_vectors_full, rem_rad, nr_orig, nc_orig){
   
@@ -1488,7 +1475,8 @@ fit_subdendrite_new <- function(SUBD, dist, ha, va, IMG){
     mutate(cumu=cumsum(i), n=c(1:nrow(.))) %>%
     group_by(cumu) %>%
     summarize(c=length(i), mn=min(n)) %>%
-    filter(c>10) 
+    .[which(.$c>10),]
+  #filter(c>10) 
   
   if(nrow(max_n)==0){
     vec %>%pull(i) %>%
@@ -1501,7 +1489,7 @@ fit_subdendrite_new <- function(SUBD, dist, ha, va, IMG){
   
 }
 
-define_full_vector_info <- function(ELD, IMG){
+define_full_vector_info <- function(ELD, IMG, SOMA){
   
   #ELD <- elongated_dendrites[[2]]
   
@@ -1524,13 +1512,13 @@ define_full_vector_info <- function(ELD, IMG){
       
       ## check if vector diverges from soma
       dist_start_soma=cppDistPts(xs, ys, zs, 
+                                 round(SOMA[["x"]]), 
+                                 round(SOMA[["y"]]), 
+                                 round(SOMA[["z"]]))
+      dist_end_soma=cppDistPts(xe, ye, ze, 
                                round(SOMA[["x"]]), 
                                round(SOMA[["y"]]), 
                                round(SOMA[["z"]]))
-      dist_end_soma=cppDistPts(xe, ye, ze, 
-                             round(SOMA[["x"]]), 
-                             round(SOMA[["y"]]), 
-                             round(SOMA[["z"]]))
       
       direction <- ifelse(dist_start_soma<dist_end_soma,
                           1, -1)
@@ -1672,18 +1660,18 @@ screen_subdendrite_starts <- function(start, rel_z_layer, elgt_len, VEC, IMG){
     bind_rows() %>% 
     rowwise() %>%
     mutate(dist_to_soma=cppDistPts(x, y, z, 
-                                 round(SOMA[["x"]]), 
-                                 round(SOMA[["y"]]), 
-                                 round(SOMA[["z"]]))) %>%
+                                   round(SOMA[["x"]]), 
+                                   round(SOMA[["y"]]), 
+                                   round(SOMA[["z"]]))) %>%
     select(x,y,z,i,dist_to_soma)
   return(df)
 }
 
 
 
-get_surr_layer <- function(comb_main_dend, SOMA, nr_orig, IMG_screen, soma_radius, z_range, det_rad){
+get_surr_layer_old <- function(comb_main_dend, SOMA, nr_orig, IMG_screen, soma_radius, z_range, det_rad){
   
- # t0 <- Sys.time()
+  # t0 <- Sys.time()
   for(CT in 1:nrow(comb_main_dend)){
     #print(CT)
     VP <- comb_main_dend[CT,]
@@ -1733,6 +1721,7 @@ get_surr_layer <- function(comb_main_dend, SOMA, nr_orig, IMG_screen, soma_radiu
 
 
 
+#n <- 2
 # main_vectors=inter$main_vectors
 # main_vectors_df=inter$main_vectors_df
 # main_vectors_full=inter$main_vectors_full
@@ -1745,15 +1734,15 @@ get_surr_layer <- function(comb_main_dend, SOMA, nr_orig, IMG_screen, soma_radiu
 # det_rad=opt$subd_max_detection_distance
 # z_range=opt$subd_detection_vertical_range
 # nr_orig=opt$nr_orig
-# n <- 2
+# screen_subd_starts_circle=inter$subd_max_detection_circle
 
 find_subdendritic_starts_new <- function(n, main_vectors, main_vectors_df,main_vectors_full, 
                                          SOMA, IMG_screen, IMG_adj, soma_radius, MPTS, EPS, det_rad, z_range,
-                                         depth, nr_orig){
+                                         depth, nr_orig, screen_subd_starts_circle){
   
   #find_subdendritic_starts <- function(IMG, main_vectors, main_vectors_full, rem_rad, nr_orig, nc_orig)  
   
-  
+  #t0 <- Sys.time()
   cat(paste0("\n  process: MD:", n))
   
   rel_vecs_raw <- main_vectors[[n]]
@@ -1765,34 +1754,21 @@ find_subdendritic_starts_new <- function(n, main_vectors, main_vectors_df,main_v
   full_dendrite <- bind_rows(full_vecs) %>% 
     mutate_all(.funs = as.numeric)
   
-  
-  
-  # comb_main_dend <- lapply(1:length(main_vectors), function(n){
-  #   full_vecs <- main_vectors_full[[n]]
-  #   full_dendrite <- bind_rows(full_vecs) %>%
-  #     mutate_all(.funs = as.numeric) %>%
-  #     mutate(ind=get_single_index(x,y,nr_orig)) 
-  # }) %>% bind_rows()
-  
   comb_main_dend <- full_vecs_raw %>% bind_rows() %>%
     mutate_all(.funs = as.numeric) %>%
     mutate(ind=get_single_index(x,y,nr_orig))
+  #t1 <- Sys.time()
+  all_surrounding_vox <- get_surr_layer(comb_main_dend, SOMA, nr_orig, 
+                                        IMG_screen, soma_radius, z_range, det_rad)
   
   
-  
-  all_surrounding_vox <- get_surr_layer(comb_main_dend, SOMA, nr_orig, IMG_screen, soma_radius, z_range, det_rad)
-  
-  
-  
-  
-  
-  #print(1)
-  
+  #print(t2-t1)
+  #ggplot(all_surrounding_vox, aes(x=x, y=y))+facet_wrap(~z)+geom_tile()
   #show_surrounding_layer_all_layers(all_sorrounding_vox, "f:/data_sholl_analysis/test/full_sorrounding.pdf")
   ## orig... withour neighboring voxels... eps=3.5 minPTS=15
   #cat(paste0("\n    clustering"))
   df_centers <- find_subd_cluster_man(all_surrounding_vox, EPS, MPTS)
-  
+  #t2 <- Sys.time()
   #print(2)
   ## if no subdendrite starts are found... the main dendrite is just a subdendrite
   if(is.null(df_centers)){
@@ -1804,9 +1780,9 @@ find_subdendritic_starts_new <- function(n, main_vectors, main_vectors_df,main_v
                          det_rad=det_rad,
                          IMG=IMG_adj) %>% 
     compact() 
-  print(3)
+  #print(3)
   ## remove duplicated subdendirte starts
-  
+  #t3 <- Sys.time()
   if(is.null(retraced_subd)){return(NULL)}
   rescored_subdendrites_raw <- lapply(1:length(retraced_subd), function(nDEND){
     #print(nDEND)
@@ -1836,11 +1812,11 @@ find_subdendritic_starts_new <- function(n, main_vectors, main_vectors_df,main_v
     
   }) %>% unique()
   
-  print(4)
+  #print(4)
   #cat(paste0("\n    adjusting"))
   
   ## check intersecting subdendrites
-  
+  #t4 <- Sys.time()
   if(is.null(rescored_subdendrites_raw)){return(NULL)}
   
   linear_equations <- lapply(rescored_subdendrites_raw, get_linear_equation)
@@ -1881,7 +1857,7 @@ find_subdendritic_starts_new <- function(n, main_vectors, main_vectors_df,main_v
     
     ## now create new list of duplicated subdendrites
     
-    print(4)
+    #print(4)
     #rel_vec_linear_eq <- lapply(rel_vecs, get_linear_equation)
     if(nrow(intersections)!=0){
       adjusted_subdendrite_starts <- apply(intersections, 1, function(PAIR){
@@ -1987,7 +1963,7 @@ find_subdendritic_starts_new <- function(n, main_vectors, main_vectors_df,main_v
   #cat(paste0("\n    structurize"))
   
   #rescored_subdendrites <- retraced_subd
-  
+  #t5 <- Sys.time()
   df_poslev <- rescored_subdendrites %>%
     bind_rows() %>%
     rowwise() %>%
@@ -2106,7 +2082,7 @@ find_subdendritic_starts_new <- function(n, main_vectors, main_vectors_df,main_v
   })
   
   return(assigned_nodes)
-  
+  #t6 <- Sys.time()
 }
 
 
@@ -2126,9 +2102,9 @@ find_subdendritic_starts_new <- function(n, main_vectors, main_vectors_df,main_v
 # MPTS <- 33
 
 find_subd_cluster_man <- function(df, EPS, MPTS){
-   df_filtered <- df %>% 
-  #   #.[which(.$i!=0),] %>%
-     select(x,y,z) #
+  df_filtered <- df %>% 
+    #   #.[which(.$i!=0),] %>%
+    select(x,y,z) #
   #ggplot(df_filtered, aes(x=x, y=-y,))+geom_point()+facet_wrap(~z)
   #if(nrow(df_filtered)==0){return(NULL)} 
   df_clustered <- df_filtered %>% 
@@ -2149,49 +2125,49 @@ find_subd_cluster_man <- function(df, EPS, MPTS){
   return(df_centers)
 }
 
-
-find_subd_cluster_man2 <- function(Z, EPS, MPTS, xs, ys){
-  
-  
-  
-  rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
-    .[between(., 1, length(IMG))] 
-  
-  centers1 <- screen_circular_new(det_rad, rel_z_layer,
-                                  INC, xs, ys, zs, ha, ha_cutoff, screening_angle, IMG) %>%
-    mutate(index=get_3d_single_index(x,y,z, nr_orig))
-
-  ## remove positions of other dendrites
-  # centers_rem <- centers1 %>%
-  #   .[which(!.$index %in% c(all_points, recursive=T)),]
-  
-  centers_rem <- centers1 %>%
-    .[which(!.$index %in% all_points),]
-  
-  df_filtered <- df %>% 
-    .[which(.$i!=0),] %>%
-    select(x,y,z) #
-  #ggplot(df_filtered, aes(x=x, y=-y,))+geom_point()+facet_wrap(~z)
-  if(nrow(df_filtered)==0){return(NULL)} 
-  
-  df_clustered <- df_filtered %>% 
-    ungroup() %>%
-    mutate(c=fpc::dbscan(df_filtered, eps = EPS, MinPts = MPTS)$cluster) %>%
-    .[which(.$c!=0),]%>%
-    rowwise() %>%
-    mutate(ha=cppGetHA(x,y, xs, ys))
-  if(nrow(df_clustered)==0){return(NULL)}
-  #ggplot(df_clustered, aes(x=x, y=-y,color=as.character(c)))+geom_point()+facet_wrap(~z)
-  df_centers <- lapply(unique(df_clustered$c), function(CLUST){
-    kmeans(df_clustered %>%  
-             .[which(.$c==CLUST),] %>%
-             select(x,y,z), 
-           centers=1)$centers %>%
-      round() %>%
-      set_names(nm=c("x","y","z"))
-  })
-  return(df_centers)
-}
+# 
+# find_subd_cluster_man2 <- function(Z, EPS, MPTS, xs, ys, circle){
+#   
+#   
+#   
+#   rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
+#     .[between(., 1, length(IMG))] 
+#   
+#   centers1 <- screen_circular_new(det_rad, rel_z_layer,
+#                                   INC, xs, ys, zs, ha, ha_cutoff, screening_angle, IMG, circle) %>%
+#     mutate(index=get_3d_single_index(x,y,z, nr_orig))
+# 
+#   ## remove positions of other dendrites
+#   # centers_rem <- centers1 %>%
+#   #   .[which(!.$index %in% c(all_points, recursive=T)),]
+#   
+#   centers_rem <- centers1 %>%
+#     .[which(!.$index %in% all_points),]
+#   
+#   df_filtered <- df %>% 
+#     .[which(.$i!=0),] %>%
+#     select(x,y,z) #
+#   #ggplot(df_filtered, aes(x=x, y=-y,))+geom_point()+facet_wrap(~z)
+#   if(nrow(df_filtered)==0){return(NULL)} 
+#   
+#   df_clustered <- df_filtered %>% 
+#     ungroup() %>%
+#     mutate(c=fpc::dbscan(df_filtered, eps = EPS, MinPts = MPTS)$cluster) %>%
+#     .[which(.$c!=0),]%>%
+#     rowwise() %>%
+#     mutate(ha=cppGetHA(x,y, xs, ys))
+#   if(nrow(df_clustered)==0){return(NULL)}
+#   #ggplot(df_clustered, aes(x=x, y=-y,color=as.character(c)))+geom_point()+facet_wrap(~z)
+#   df_centers <- lapply(unique(df_clustered$c), function(CLUST){
+#     kmeans(df_clustered %>%  
+#              .[which(.$c==CLUST),] %>%
+#              select(x,y,z), 
+#            centers=1)$centers %>%
+#       round() %>%
+#       set_names(nm=c("x","y","z"))
+#   })
+#   return(df_centers)
+# }
 
 
 
@@ -2291,6 +2267,22 @@ screen_circular <- function(det_rad, z_range, X, Y, Z, ha, IMG){
     return()
   
 }
+
+
+create_circle_mat <- function(DET_RAD){
+  if(is.integer(DET_RAD/2)){
+    ss <- 2*pi/(DET_RAD*12)
+  } else {
+    ss <- 2*pi/(DET_RAD*2*(5+(DET_RAD-2)))
+  }
+  sapply(seq(ss, 2*pi, ss), function(a){
+    return(c(x=cos(a)*DET_RAD,
+             y=sin(a)*DET_RAD) %>% round())
+  }) %>% t() %>%
+    return()
+  
+}
+
 create_circle <- function(DET_RAD){
   if(is.integer(DET_RAD/2)){
     ss <- 2*pi/(DET_RAD*12)
@@ -2332,125 +2324,115 @@ create_circle_old <- function(DET_RAD){
 
 
 screen_circular_new <- function(det_rad, rel_z_layer,bmin, bmax,
-                                INC, X, Y, Z, ha, ha_cutoff, screening_angle, IMG){
+                                INC, X, Y, Z, ha, ha_cutoff, screening_angle, IMG,
+                                circle, SOMA){
   
-  #t0 <- Sys.time()
-  # if(is.null(screening_angle)){
-  #   bmin <- 0
-  #   bmax <- 360
-  # } else {
-  # 
-  #   bmin=ha-0.5*screening_angle
-  #   bmax=ha+0.5*screening_angle
-  #   if(!is.null(ha_cutoff)){
-  #     if(ha<ha_cutoff){
-  #       if(bmax>ha_cutoff){
-  #         bmax <- round(ha_cutoff)
-  #       }
-  #       
-  #       if(bmin<ha_cutoff-180){
-  #         bmin <- round(ha_cutoff-180)
-  #       }
-  #     } else {
-  #       if(bmax>ha_cutoff+180){
-  #         bmax <- round(ha_cutoff+180)
-  #       }
-  #       if(bmin<ha_cutoff){
-  #         bmin <- round(ha_cutoff)
-  #       }
-  #     }
-  #   }
-  # }
-  # rel_z_layer <- seq(Z-z_range, Z+z_range, 1) %>%
-  #   .[between(., 1, length(raw_image))]
-  
-  #t1 <- Sys.time()
-  #lapply(c(det_rad-INC, det_rad+INC), function(DET_RAD){
-  #lapply(seq(det_rad-INC, det_rad+INC, 1), function(DET_RAD){
-  
-    DET_RAD <- det_rad+INC
+  DET_RAD <- det_rad+INC
+  somx <- round(SOMA[["x"]])
+  somy <- round(SOMA[["y"]])
+  somz <- round(SOMA[["z"]])
+  fin <- lapply(rel_z_layer, function(ZS){
+    #sst0 <- Sys.time()
+    # df_circ_x <- tibble(x=seq(-DET_RAD, DET_RAD, 1)) %>%
+    #   mutate(yp=sqrt(DET_RAD^2-x^2),
+    #          yn=-sqrt(DET_RAD^2-x^2)) %>%
+    #   gather(dir, y, -x)
+    # 
+    # df_circ_y <- tibble(y=seq(-DET_RAD, DET_RAD, 1)) %>%
+    #   mutate(xp=sqrt(DET_RAD^2-y^2),
+    #          xn=-sqrt(DET_RAD^2-y^2)) %>%
+    #   gather(dir, x, -y)
+    # 
+    # df_circ_full <- bind_rows(df_circ_x, df_circ_y) %>%
+    #   mutate_at(.vars = c("x", "y"), .funs = round) %>%
+    #   mutate(id=paste(x, y, sep="_")) %>%
+    #   filter(!duplicated(id)) %>%
+    #   rowwise() %>%
+    #   mutate(xa=x+X,
+    #          ya=y+Y,
+    #          angle=cpprad2deg(atan((y/DET_RAD)/(x/DET_RAD))),
+    #          af=case_when(
+    #            x<0 ~ angle+180,
+    #            angle<0~ angle+360,
+    #            TRUE ~ angle
+    #          ),
+    #   )
+    #sst0 <- Sys.time()
+    df_circ_full <- circle %>%
+      rowwise() %>%
+      mutate(xa=x+X,
+             ya=y+Y,
+             angle=cpprad2deg(atan((y/DET_RAD)/(x/DET_RAD))),
+             # af=case_when(
+             #   x<0 ~ angle+180,
+             #   angle<0~ angle+360,
+             #   TRUE ~ angle
+             # ),
+             af=ifelse(x<0,
+                       angle+180,
+                       ifelse(angle<0, 
+                              angle+360, 
+                              angle))
+      )
+    #sst1 <- Sys.time()
+    #print(sst1-sst0)
+    all_vox <- lapply(c(min(df_circ_full$x):max(df_circ_full$x)), function(X){
       
-    fin <- lapply(rel_z_layer, function(ZS){
-      
-      df_circ_x <- tibble(x=seq(-DET_RAD, DET_RAD, 1)) %>%
-        mutate(yp=sqrt(DET_RAD^2-x^2),
-               yn=-sqrt(DET_RAD^2-x^2)) %>%
-        gather(dir, y, -x)
-      
-      df_circ_y <- tibble(y=seq(-DET_RAD, DET_RAD, 1)) %>%
-        mutate(xp=sqrt(DET_RAD^2-y^2),
-               xn=-sqrt(DET_RAD^2-y^2)) %>%
-        gather(dir, x, -y)
-      
-      df_circ_full <- bind_rows(df_circ_x, df_circ_y) %>%
-        mutate_at(.vars = c("x", "y"), .funs = round) %>%
-        mutate(id=paste(x, y, sep="_")) %>%
-        filter(!duplicated(id)) %>%
-        rowwise() %>%
-        mutate(xa=x+X,
-               ya=y+Y,
-               angle=cpprad2deg(atan((y/DET_RAD)/(x/DET_RAD))),
-               af=case_when(
-                 x<0 ~ angle+180,
-                 angle<0~ angle+360,
-                 TRUE ~ angle
-               ), 
-               #cs=cos(0.5*cppdeg2rad(af))
-        ) #%>%
-      
-      all_vox <- lapply(c(min(df_circ_full$x):max(df_circ_full$x)), function(X){
-        
-        all_x <- df_circ_full[which(df_circ_full$x==X),] #%>%
-        #arrange(y)
-        return(tibble(x=X, y=c(min(all_x$y):max(all_x$y))))
-        
-      }) %>% bind_rows() %>% rowwise() %>%
-        mutate(dist=cppDistPts(x,y,0, 0,0,0),
-               ha=cppGetHA(x,y,0,0)) %>%
-        .[which(.$dist>det_rad-INC),]
-      
-      #ggplot(all_vox, aes(x=x, y=y))+geom_tile()
-      if(between(bmin, 0, 360)&between(bmax, 0, 360)){
-        
-        #df_circ <- df_circ_full[which(between(df_circ_full$af, bmin, bmax)),]
-        
-        df_circ <- all_vox[which(between(all_vox$ha, bmin, bmax)),]
-        
-      } else if(bmin<0){
-        
-        df_circ <- all_vox[which(between(all_vox$ha, bmin+360, 360)|between(all_vox$ha, 0, bmax)),]
-        
-      } else {
-        df_circ <- all_vox[which(between(all_vox$ha, bmin, 360)|between(all_vox$ha, 0, bmax-360)),]
-        
-      }
-      
-      #ggplot(df_circ, aes(x=x, y=y))+geom_tile()
-      df_circ %>%    
-        
-        
-        rowwise() %>%
-        
-        
-        
-        mutate(z=ZS,
-               xa=x+X,
-               ya=y+Y,
-               i=cppSelectIntensity(xa, ya, z, IMG=IMG)) %>%
-        
-        select(x=xa, y=ya, z, i) %>%
-        mutate(dist_to_soma=cppDistPts(x, y, z, round(SOMA[["x"]]), round(SOMA[["y"]]), round(SOMA[["z"]]))) %>%
-        return()
-      # ggplot(df_circ, aes(x=x, y=y, color=cs))+geom_point()+
-      #   scale_color_gradientn(#breaks=c(0, 90, 180, 270,360), 
-      #                         colors = c("green" ,"red", "blue", "black"))
-      
-    }) %>%
-      compact() %>%
+      all_x <- df_circ_full[which(df_circ_full$x==X),] #%>%
+      #arrange(y)
+      #return(tibble(x=X, y=c(min(all_x$y):max(all_x$y))))
+      y=c(min(all_x$y):max(all_x$y))
+      x=rep(X, length(y))
+      return(cbind(x,y) %>% set_names(nm=c("x", "y")))
+    }) %>% 
       bind_rows() %>%
-      return() 
+      #Reduce(function(x,y)rbind(x,y),.) #%>%
+      # apply(.,1,function(ROW){
+      #   dist=cppDistPts(ROW["x"],ROW["y"],0, 0,0,0)
+      #   ha=cppGetHA(ROW["x"],ROW["y"],0,0)
+      #   return(c(ROW, dist=dist, ha=ha))
+      #  }) #%>% 
+      # t() %>% 
+      # as_tibble() %>%
+      # #bind_rows() %>% 
+      rowwise() %>%
+      mutate(dist=cppDistPts(x,y,0, 0,0,0),
+             ha=cppGetHA(x,y,0,0)) %>%
+      .[which(.$dist>det_rad-INC),]
+    #sst2 <- Sys.time()
+    #print(sst2-sst1)
+    #ggplot(all_vox, aes(x=x, y=y))+geom_tile()
+    if(between(bmin, 0, 360)&between(bmax, 0, 360)){
+      df_circ <- all_vox[which(between(all_vox$ha, bmin, bmax)),]
+    } else if(bmin<0){
+      df_circ <- all_vox[which(between(all_vox$ha, bmin+360, 360)|between(all_vox$ha, 0, bmax)),]
+    } else {
+      df_circ <- all_vox[which(between(all_vox$ha, bmin, 360)|between(all_vox$ha, 0, bmax-360)),]
+    }
+    
+    #ggplot(df_circ, aes(x=x, y=y))+geom_tile()
+    ret <- df_circ %>%    
+      rowwise() %>%
+      mutate(z=ZS,
+             x=x+X,
+             y=y+Y,
+             i=cppSelectIntensity(x, y, z, IMG=IMG)) %>%
+      
+      #select(x=xa, y=ya, z, i) %>%
+      mutate(dist_to_soma=cppDistPts(x, y, z, somx, somy, somz)) #%>%
+    #sst3 <- Sys.time()
+    #print(sst3-sst2)
+    return(ret[c("x","y","z","i","dist_to_soma")])
+    # ggplot(df_circ, aes(x=x, y=y, color=cs))+geom_point()+
+    #   scale_color_gradientn(#breaks=c(0, 90, 180, 270,360), 
+    #                         colors = c("green" ,"red", "blue", "black"))
+    
+  }) %>%
+    compact() %>%
+    bind_rows() %>%
+    return() 
   #}) %>% bind_rows() %>%
-    #return()
+  #return()
   
 }
 
@@ -2564,49 +2546,54 @@ define_surr_layer <- function(rel_vecs, full_vecs, DET_RAD, z_range, IMG, INC){
 }
 
 
-
-
-# SUBD <- bind_rows(df_centers)[14,]
+# SUBD <- bind_rows(df_centers)[1,]
+# full_dendrite=full_dendrite
+# det_rad=det_rad
 # IMG=IMG_adj
-#IMG <- images$bin_noS_image_p
 
 fit_path_to_subd_cluster <- function(SUBD, full_dendrite, det_rad, IMG){
-  print(1)
-  
+  #print(1)
+  # t0 <- Sys.time()
   df_dist_raw <- full_dendrite %>%
     rowwise() %>%
     mutate(dist=cppDistPts(x,y,z,as.numeric(SUBD[["x"]]),as.numeric(SUBD[["y"]]),as.numeric(SUBD[["z"]])),
            ha=cppGetHA(x,y,as.numeric(SUBD[["x"]]),as.numeric(SUBD[["y"]])),
            va=cppGetVA(dist, as.numeric(SUBD[["z"]]), z)) %>%
     .[which(.$dist<=4*det_rad),]
-  print(2)
+  #print(2)
+  # t1 <- Sys.time()
+  ############################################################### make this faster (2.1 secs)
   if(nrow(df_dist_raw)==0){return(NULL)}
   
   df_dist <- df_dist_raw %>%
     mutate(int_score=fit_subdendrite_new(SUBD, dist, ha, va, IMG),
            score=dist*(1/int_score^2)) %>%
     .[which(.$int_score!=0),]
-  
+  ###############################################################
+  #  t2 <- Sys.time()
   if(nrow(df_dist)==0){return(NULL)}
-
+  
   
   final_intersection <- 
     df_dist[which(df_dist$score==min(df_dist$score)),] %>%
     #df_dist[which(df_dist$int_score==max(df_dist$int_score)),] %>%
     #.[which(.$dist==min(.$dist)),] %>%
     .[1,]
-  print(4)
+  #print(4)
+  #  t3 <- Sys.time()
   closest_main_vector <- df_dist_raw[which(df_dist_raw$dist==min(df_dist_raw$dist)),] %>%
     ## sometimes two main vectors have exact same distance....
     .[1,]
-  print(5)
+  #print(5)
+  #  t4 <- Sys.time()
   subd_start <- final_intersection %>% select(xs=x,ys=y,zs=z, level, ha, va, dist) %>%
     mutate(xe=SUBD[["x"]],
            ye=SUBD[["y"]],
            ze=SUBD[["z"]],
            clos_vec=closest_main_vector$level,
            d_to_cv=closest_main_vector$dist)
-  print(6)
+  #print(6)
+  #  t5 <- Sys.time()
   return(subd_start)
   
 }
@@ -2646,7 +2633,7 @@ show_surrounding_layer_all_layers <- function(all_sorrounding_vox, filename){
     
     
   })
-
+  
 }
 
 
@@ -2720,7 +2707,7 @@ trace_dendrite <- function(SUBD, headnode, det_rad, z_range){
 
 #tMASTER <- MASTER
 #main_vectors <- inter$main_vectors
-export_structure <- function(tMASTER, main_vectors, output_file){
+export_structure <- function(tMASTER, main_vectors, SOMA, output_file){
   
   node_order <- lapply(tMASTER, function(MAIND_raw){   ## main dendrites
     
@@ -3095,7 +3082,7 @@ format_new_subdendrite_starts <- function(CENT_raw, full_vecs_raw, last_pos, new
   return(list(info=info, full_coords=full_coords))
 }
 
-get_vox_of_borders <- function(n, main_dendrites, nc_orig, nr_orig, IMG){
+get_vox_of_borders <- function(n, main_dendrites, nc_orig, nr_orig, IMG, SOMA){
   
   if(n!=nrow(main_dendrites)){
     h_angle <- 0.5*sum(main_dendrites$h_angle[n], main_dendrites$h_angle[n+1])
@@ -3207,9 +3194,9 @@ rescore_traced_subnodes <- function(centers, last_pos, RESC_DIST, RESC_ANG){
   
 }
 
-get_circle_around_point <- function(P, RAD, nr_orig){
+get_circle_around_point_old <- function(P, df_circ_full, nr_orig){
   
-  df_circ_full <- create_circle(RAD)
+  #df_circ_full <- create_circle(RAD)
   
   all_vox <- lapply(c(min(df_circ_full$x):max(df_circ_full$x)), function(X){
     
@@ -3225,15 +3212,64 @@ get_circle_around_point <- function(P, RAD, nr_orig){
     return()
 }
 
-get_sphere_around_point <- function(P, RADv, RADh, nr_orig, nz_orig){
+get_circle_around_point <- function(P, df_circ_full, nr_orig){
+  
+  #df_circ_full <- create_circle(RAD)
+  
+  #print(min(df_circ_full$x))
+  #print(max(df_circ_full$x))
+  
+  all_vox <- lapply(c(min(df_circ_full$x):max(df_circ_full$x)), function(X){
+    
+    all_x <- df_circ_full[which(df_circ_full$x==X),] #%>%
+    #arrange(y)
+    #return(tibble(x=X, y=c(min(all_x$y):max(all_x$y))))
+    y=c(min(all_x$y):max(all_x$y))
+    x=rep(X, length(y))
+    return(cbind(x,y) %>% set_names(nm=c("x", "y")))
+  }) %>% 
+    bind_rows() %>%
+    mutate(x=x+P[["x"]],
+           y=y+P[["y"]],
+           short=get_single_index(x,y,nr_orig)) %>%
+    pull(short) %>%
+    return()
+}
+
+
+get_circle_around_point_xy <- function(P, df_circ_full, nr_orig){
+  
+  #df_circ_full <- create_circle(RAD)
+  all_vox <- lapply(c(min(df_circ_full$x):max(df_circ_full$x)), function(X){
+    
+    all_x <- df_circ_full[which(df_circ_full$x==X),] #%>%
+    #arrange(y)
+    #return(tibble(x=X, y=c(min(all_x$y):max(all_x$y))))
+    y=c(min(all_x$y):max(all_x$y))+P[["y"]]
+    x=rep(X, length(y))+P[["x"]]
+    return(cbind(x,y) %>% set_names(nm=c("x", "y")))
+  }) %>% 
+    bind_rows() %>%
+    # mutate(x=x+P[["x"]],
+    #        y=y+P[["y"]],
+    #        #short=get_single_index(x,y,nr_orig)
+    #        ) %>%
+    #pull(short) %>%
+    return()
+}
+
+
+
+
+get_sphere_around_point <- function(P, RADv, circle, nr_orig, nz_orig){
   
   lapply(c((P[["z"]]-RADv):(P[["z"]]+RADv)) %>% .[which(between(., 1, nz_orig))], function(Z){
-    get_circle_around_point(P, RADh, nr_orig) %>% paste(Z, ., sep="_")
+    get_circle_around_point(P, circle, nr_orig) %>% paste(Z, ., sep="_")
   }) %>% c(recursive=T)
   
 }
 
-get_all_vector_speheres <- function(all_vectors_fv_comb, RADv, RADh, nr_orig, IMG){
+get_all_vector_speheres <- function(all_vectors_fv_comb, RADv, RADh, circle, nr_orig, IMG){
   all_points <- list()
   
   nra <- nrow(all_vectors_fv_comb)
@@ -3242,13 +3278,13 @@ get_all_vector_speheres <- function(all_vectors_fv_comb, RADv, RADh, nr_orig, IM
   
   steps <- seq(1, nra, round(RADh/2)) %>% c(.,nra) %>% unique()
   
-  cat(paste("       assigning", nra, "pts (", length(steps), "iterations)"))
+#  cat(paste("       assigning", nra, "pts (", length(steps), "iterations)"))
   for(nPT in steps){
     
     #print(nPT)
     
     PT <- all_vectors_fv_comb[nPT,]
-    apt <- get_sphere_around_point(PT, RADv, RADh,nr_orig, length(IMG))
+    apt <- get_sphere_around_point(PT, RADv, circle, nr_orig, length(IMG))
     
     all_points <- c(all_points, apt) %>% unique()
     
@@ -3280,15 +3316,9 @@ get_all_vector_speheres <- function(all_vectors_fv_comb, RADv, RADh, nr_orig, IM
 trace_subdendrites <- function(MAIND, MV, main_vectors_full,
                                all_vectors, all_points,
                                IMG, EPS_orig, MPTS_orig, INC, 
-                               RADv, RADh,
-                               det_rad, RESC_DIST, RESC_ANG, nr_orig){  
-   # nMD <- 2
-   # nND <- 1
-   # nSD <- 1
-  # print(EPS_orig)
-  # print(MPTS_orig)
-  # MV <- main_vectors_df[[nMD]]
-  # MAIND <- MASTER[[nMD]]
+                               RADv, RADh, cross_circle,
+                               det_rad, RESC_DIST, RESC_ANG, nr_orig,
+                               circle, SOMA){  
   
   red_vec <- lapply(all_vectors, function(V) {
     return(list(c(x=V[["xs"]],y=V[["ys"]],z=V[["zs"]], id=V[["id"]], ha=V[["ha"]]),
@@ -3296,30 +3326,17 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
     ))
   }) %>% Reduce(function(x,y)append(x,y),.) %>% unique() %>% bind_rows()
   
-  
   if(is.null(MAIND)){
     return(NULL)
   }
-  
-  ## for testing ... remove nodes at end of dendrite...
-  # MAIND <- MAIND[c(1:16)]
-  # MAIND[[16]]$subnodes <- list()
-  # MAIND[[16]]$subnode_full <- list()
-  
-  
   nND <- 0
   n_processed <- 0
-  #print(1)
   #nND <- 25
   while(n_processed < length(MAIND)){ ## nodes
     
-  ### nur main nodes:  
-  #while(n_processed < 38){
-    
-      
     nND <- nND + 1
     
-    cat(paste("\n  node:", nND, "of", length(MAIND)))
+    #cat(paste("\n  node:", nND, "of", length(MAIND)))
     
     NODE <- MAIND[[nND]]
     
@@ -3328,29 +3345,21 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
     new_subnodes <- NODE$subnodes
     new_SUBD_list <- list()
     new_SUBN_list <- NODE$subnode_full
-    #print(2)
+    
+    cat(paste0("\n|--", nND, "/", length(MAIND), ": ", length(SUBD_list)))
     #nSD <- 1
     for(nSD in 1:length(SUBD_list)){
       
-      cat(paste("\n    subd:", nSD, "of", length(SUBD_list)))
+      #cat(paste("\n    subd:", nSD, "of", length(SUBD_list), "|"))
+      cat("\n|  ")
+      
       SUBD <- SUBD_list[[nSD]]
       SUBD_info <- SUBD$info
-      
-      #det_rad <- 12
-      #z_range <- 5
       
       xs <- SUBD_info$x
       ys <- SUBD_info$y
       zs <- SUBD_info$z
       ha <- adj_deg(SUBD_info$ha)
-      ## only define ha_cutoff if node intersects with main vectors
-      
-
-        # ha_cutoff <- MV %>%
-        #   filter(level==SUBD_info$clos_vec) %>%
-        #   pull(ha)
-      # }
-      
       
       coord_list <- list()
       ha_list <- list()
@@ -3359,13 +3368,11 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
       node_detected <- F
       remove_dend <- F
       z_cutoff <- 12
-      
-      
-      while(abort==F){ 
-      #for(i in c(1:3)){
-          #print(3)
-          #st <- Sys.time()
-        cat(paste("\n      elgt step:",c))
+      #for(i in 1){
+      while(abort==F){
+        #t0 <- Sys.time()
+        #cat(paste("\n      elgt step:",c))
+        cat("-")
         if(SUBD_info$orient=="end"){
           ha_cutoff <- NULL
           screening_angle <- 180
@@ -3392,21 +3399,22 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
           z_range <- 6
           alt <- F
         }
-
+        
         Z <- round(zs+tan(cppdeg2rad(SUBD_info$va))*det_rad)
-
-###########################################
+        
+        ###########################################
         
         cluster_ok=F
         DR <- det_rad
         ZR <- z_range
         MPTS <- MPTS_orig
         EPS <- EPS_orig
+        #t1 <- Sys.time()
         while(cluster_ok==F){
-        
+          st1 <- Sys.time()
           rel_z_layer <- seq(Z-round(ZR), Z+round(ZR), 1) %>%
-              .[between(., 1, length(IMG))]
-  
+            .[between(., 1, length(IMG))]
+          
           if(is.null(screening_angle)){
             bmin <- 0
             bmax <- 360
@@ -3433,14 +3441,15 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
               }
             }
           }
-          
+          #st2 <- Sys.time()
           
           
           
           centers1 <- screen_circular_new(DR, rel_z_layer, bmin, bmax,
-                                            INC, xs, ys, zs, ha, ha_cutoff, screening_angle, IMG) #%>%
+                                          INC, xs, ys, zs, ha, ha_cutoff, screening_angle, IMG, circle, SOMA) #%>%
           
-          
+          # st3 <- Sys.time()
+          # print(st3-st2)
           #ggplot(centers1, aes(x=x, y=-y))+geom_point()+facet_wrap(~z)
           
           if(nrow(centers1)==0){
@@ -3449,14 +3458,14 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
           } else {
             
             
-              ## remove positions of other dendrites
+            ## remove positions of other dendrites
             # centers_rem <- centers1 %>%
             #   mutate(index=get_3d_single_index(x,y,z, nr_orig)) %>%
             #       .[which(!.$index %in% c(all_points, recursive=T)),]
             centers_rem <- centers1 %>%
               mutate(index=get_3d_single_index(x,y,z, nr_orig)) %>%
               .[which(!.$index %in% all_points),]
-            
+            #st4 <- Sys.time()
             #ggplot(centers_rem, aes(x=x, y=-y))+geom_point()+facet_wrap(~z)
             
             if(nrow(centers_rem)==0){
@@ -3464,11 +3473,11 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
               cluster_ok <- T
             } else {
               
-            
+              
               df_filtered <- centers_rem %>% 
                 .[which(.$i!=0),] %>%
                 select(x,y,z) #
-            #ggplot(df_filtered, aes(x=x, y=-y,))+geom_point()+facet_wrap(~z)
+              #ggplot(df_filtered, aes(x=x, y=-y,))+geom_point()+facet_wrap(~z)
               if(nrow(df_filtered)==0){
                 centers2 <- NULL
                 cluster_ok <- T
@@ -3484,7 +3493,7 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
                   centers2 <- NULL
                   cluster_ok <- T
                 } else {
-                
+                  
                   df_clustered <- df_clustered_raw %>%
                     rowwise() %>%
                     mutate(ha_man=adj_deg(cppGetHA(x,y, xs, ys)-bmin))  
@@ -3503,25 +3512,25 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
                       mn_ha <- min(clu$ha_man)
                       mx_ha <- max(clu$ha_man)
                       if(abs(mn_ha-mx_ha)>140){
-                          return(1)
+                        return(1)
                       } else {
-                          return(NULL)
+                        return(NULL)
                       } 
                       
                     }) %>% compact()
-      
-                  if(length(spreading)==0){
-                    cluster_ok <- T
-                  } else {
-                    DR <- DR+3
-                    ZR <- ZR+0.2
-                    #MPTS <- MPTS+4
+                    
+                    if(length(spreading)==0){
+                      cluster_ok <- T
+                    } else {
+                      DR <- DR+3
+                      ZR <- ZR+0.2
+                      #MPTS <- MPTS+4
+                    }
+                    
                   }
-                  
-                }
-                
+                  #st5 <- Sys.time()
                   centers2 <- lapply(unique(df_clustered$c), function(CLUST){
-                      kmeans(df_clustered %>%  
+                    kmeans(df_clustered %>%  
                              .[which(.$c==CLUST),] %>%
                              select(x,y,z), 
                            centers=1)$centers %>%
@@ -3531,136 +3540,105 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
                 } 
               }
               if(cluster_ok==F){
-                cat("  - cluster not valid")
+                #cat("  - cluster not valid")
               }
             }
           }
-        }        
-
-        #ggplot(df_clustered, aes(x=x, y=-y,color=as.character(c)))+geom_point()+facet_wrap(~z)
-      
-        
-        
-        
-        
-        
-        
-#############################################
-        
-        ## we need this while loop if no good clusters are found to adjust the screening parameters
-        # cluster_ok <- F
-        # cc <- 1
-        # while(cluster_ok==F&cc<3){
-        # cc <- cc+1
-          # 
-
+          #st6 <- Sys.time()
+        }  
+        #t2 <- Sys.time()    
+        if(length(centers2)==0){
+          ## no elongation detected
+          abort=T
+          #cat("\n      stopped")
           
-            #centers2 <- find_subd_cluster_man(centers_rem, EPS, MPTS, alt)
-            
-            if(length(centers2)==0){
-              ## no elongation detected
-              abort=T
-              cat("\n      stopped")
-              if(c==1){
-                remove_dend <- T
-              }
-              only_one=F
-            } else if(length(centers2)>1){
-              
-              if(c==1){
-                last_pos <- SUBD$full_coords[nrow(SUBD$full_coords),]
-              } else {
-                last_pos=as_tibble(last(coord_list))
-              }
-              
-              
-            centers <- rescore_traced_subnodes(centers2, last_pos, RESC_DIST, RESC_ANG)
-              
-              
-              if(length(centers)==1){
-                cat("\n      removed duplicated")
-              } else {
-                ## node detected
-                
-                ## check if its realy a node or just duplicated
-                ## calc distance and angle to master node
-                cat("\n      node")
-                node_detected <- T
-                abort <- T
-              }
-              
-              only_one <- ifelse(length(centers)==1, T, F)
-            } else {
-              only_one <- T
-              centers <- centers2
-              ## elongate... only one center
-            }          
+          if(c==1){
+            remove_dend <- T
+            cat(paste("X"))
+          } else {
+            cat(paste("|"))
+          }
+          only_one=F
+        } else if(length(centers2)>1){
           
-            
-
-        #     if(alt==T&nrow(centers)>1){
-        #       cluster_ok <- F
-        #       det_rad <- det_rad
-        #       z_range <- z_range+1
-        #     } else {
-        #       cluster_ok <- T
-        #     }
-        #     
-        # } ## while for cluster ok
+          if(c==1){
+            last_pos <- SUBD$full_coords[nrow(SUBD$full_coords),]
+          } else {
+            last_pos=as_tibble(last(coord_list))
+          }
+          
+          centers <- rescore_traced_subnodes(centers2, last_pos, RESC_DIST, RESC_ANG)
+          
+          
+          if(length(centers)==1){
+            #cat("\n      removed duplicated")
+          } else {
+            cat("<")
+            node_detected <- T
+            abort <- T
+          }
+          
+          only_one <- ifelse(length(centers)==1, T, F)
+        } else {
+          only_one <- T
+          centers <- centers2
+          ## elongate... only one center
+        }          
+        #t3 <- Sys.time()
         
-            if(only_one==T){
-              ## subdendrite elongates
-              
-              elgt <- centers[[1]]
-              dist <- cppDistPts(elgt[["x"]], elgt[["y"]], elgt[["z"]], xs, ys,zs)
-              ha <- cppGetHA(elgt[["x"]], elgt[["y"]], xs,ys)
-              va <- cppGetVA(dist, 
-                             elgt[["z"]], zs)
-              nha <- ha
-              # overlap <- red_vec %>% rowwise() %>%
-              #   #bind_rows() %>%
-              #   mutate(dist=cppDistPts(x,y,z,elgt[["x"]],elgt[["y"]],elgt[["z"]])) %>%
-              #   .[which(.$dist<10),]
-              overlap <- red_vec %>% rowwise() %>%
-                #bind_rows() %>%
-                mutate(dist=cppDistPts(x,y,z,elgt[["x"]],elgt[["y"]],elgt[["z"]])) %>%
-                #.[which(.$dist<100),] #%>%
-                mutate(xyd=cppDistPts(x,y,0,elgt[["x"]],elgt[["y"]],0),
-                       zd=abs(z-elgt[["z"]]),
-                       score=sqrt(xyd^2+(0.125*zd^2))) %>%
-                .[which(.$score<10),]
-              
-              #overlap <- lapply(all_vectors, function()
-              
-              if(nrow(overlap)>0){
-                ovfin <- overlap %>% #rename(vha=ha) %>% rowwise() %>%
-                  mutate(dha=abs(ha-nha),
-                         dha2=ifelse(dha>180, 360-dha, dha),
-                         diff_ha=ifelse(dha2>90, abs(180-dha2), dha2)) %>%
-                  .[which(.$diff_ha<45),]
-              } else {
-                ovfin <- overlap
-              }
-              
-              if(nrow(ovfin)>0&c>1){
-                abort <- T
-                cat("\n      crossed")
-              } else {
-                xs <- elgt[["x"]]
-                ys <- elgt[["y"]]
-                zs <- elgt[["z"]]    
-                coord_list[[c]] <- elgt
-                ha_list[[c]] <- ha
-                c <- c+1
-              } 
-            } 
-
+        if(only_one==T){
+          ## subdendrite elongates
+          
+          elgt <- centers[[1]]
+          dist <- cppDistPts(elgt[["x"]], elgt[["y"]], elgt[["z"]], xs, ys,zs)
+          ha <- cppGetHA(elgt[["x"]], elgt[["y"]], xs,ys)
+          va <- cppGetVA(dist, 
+                         elgt[["z"]], zs)
+          nha <- ha
+          # overlap <- red_vec %>% rowwise() %>%
+          #   #bind_rows() %>%
+          #   mutate(dist=cppDistPts(x,y,z,elgt[["x"]],elgt[["y"]],elgt[["z"]])) %>%
+          #   .[which(.$dist<10),]
+          overlap <- red_vec %>% rowwise() %>%
+            #bind_rows() %>%
+            mutate(dist=cppDistPts(x,y,z,elgt[["x"]],elgt[["y"]],elgt[["z"]])) %>%
+            #.[which(.$dist<100),] #%>%
+            mutate(xyd=cppDistPts(x,y,0,elgt[["x"]],elgt[["y"]],0),
+                   zd=abs(z-elgt[["z"]]),
+                   score=sqrt(xyd^2+(0.125*zd^2))) %>%
+            .[which(.$score<10),]
+          
+          #overlap <- lapply(all_vectors, function()
+          
+          if(nrow(overlap)>0){
+            ovfin <- overlap %>% #rename(vha=ha) %>% rowwise() %>%
+              mutate(dha=abs(ha-nha),
+                     dha2=ifelse(dha>180, 360-dha, dha),
+                     diff_ha=ifelse(dha2>90, abs(180-dha2), dha2)) %>%
+              .[which(.$diff_ha<45),]
+          } else {
+            ovfin <- overlap
+          }
+          
+          if(nrow(ovfin)>0&c>1){
+            abort <- T
+            #cat("\n      crossed")
+          } else {
+            xs <- elgt[["x"]]
+            ys <- elgt[["y"]]
+            zs <- elgt[["z"]]    
+            coord_list[[c]] <- elgt
+            ha_list[[c]] <- ha
+            c <- c+1
+          } 
+        } 
+        #t4 <- Sys.time()
       } ## end of elongations (main while loop)
-
-          
-            
       
-################################################################################     
+      #cat(paste("|", c))
+      
+      
+      ################################################################################     
       if(node_detected==T){
         
         new_node_id <- length(MAIND)+1
@@ -3731,7 +3709,13 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
             ))
           }) %>% Reduce(function(x,y)append(x,y),.) %>% unique() %>% bind_rows()
         
-        new_all_points <- assign_vector_voxels(new_vectors)
+        #new_all_points <- assign_vector_voxels(new_vectors)
+        
+        ##make them right
+        #circ2 <- create_circle(RADh)
+        
+        new_all_points <- assign_vector_voxels(new_vectors,
+                                             IMG, cross_circle, RADv, RADh, nr_orig)
         
       } else if(remove_dend==T){ 
         
@@ -3748,13 +3732,14 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
         new_red_vec <- bind_rows(coord_list) %>% mutate(ha=unlist(ha_list))
         
         new_all_points <-  lapply(2:nrow(traced_SUBD$full_coords), function(V){
-            tibble(xe=traced_SUBD$full_coords[[V,"x"]],
-                   ye=traced_SUBD$full_coords[[V,"y"]],
-                   ze=traced_SUBD$full_coords[[V,"z"]],
-                   xs=traced_SUBD$full_coords[[V-1,"x"]],
-                   ys=traced_SUBD$full_coords[[V-1,"y"]],
-                   zs=traced_SUBD$full_coords[[V-1,"z"]],)
-          }) %>% assign_vector_voxels()
+          tibble(xe=traced_SUBD$full_coords[[V,"x"]],
+                 ye=traced_SUBD$full_coords[[V,"y"]],
+                 ze=traced_SUBD$full_coords[[V,"z"]],
+                 xs=traced_SUBD$full_coords[[V-1,"x"]],
+                 ys=traced_SUBD$full_coords[[V-1,"y"]],
+                 zs=traced_SUBD$full_coords[[V-1,"z"]],)
+        }) %>% assign_vector_voxels(.,
+                                    IMG, cross_circle, RADv, RADh, nr_orig)
       }
       
       red_vec <- bind_rows(red_vec, new_red_vec) 
@@ -3768,40 +3753,9 @@ trace_subdendrites <- function(MAIND, MV, main_vectors_full,
                          subnode_full=new_SUBN_list,
                          subdend_full=new_SUBD_list)
     
-    ## add new poits to full point list
-    # snl <- lapply(new_SUBN_list, function(N){
-    #   return(N[["full_coords"]])
-    # }) %>%
-    #   bind_rows()
-    # 
-    # sdl <- lapply(new_SUBD_list, function(N){
-    #   return(N[["full_coords"]])
-    # }) %>%
-    #   bind_rows()
-    # 
-    # full <- bind_rows(snl, sdl)
-    # 
-    # if(nrow(full)!=0){
-    #       vox_to_add <- apply(full, 1, 
-    #       get_sphere_around_point, RAD=5, nr_orig=nr_orig, nz_orig=length(IMG),
-    #       simplify=F)
-    # 
-    # all_points <- append(all_points, vox_to_add)
-    # } 
-    
-
-    
-    
-    
     n_processed <- n_processed + 1
     
   } ## end of while ... return full new MAIND
-  
-  
-  # test <- MASTER
-  # test[[2]] <- MAIND
-  # 
-  # export_structure(test, inter$main_vectors, "f:/data_sholl_analysis/test/dendrites/traced_3.csv")
   
   return(MAIND)        
 }
@@ -3827,7 +3781,7 @@ apply_3d_median_filter <- function(IMG, r){
 
 bin_otsu <- function(sl, IMG){
   
-   #VOX <- sl[[55]]
+  #VOX <- sl[[55]]
   
   full_cutoffs <- lapply(sl, function(VOX){
     
@@ -3882,18 +3836,20 @@ bin_otsu <- function(sl, IMG){
 
 
 
-binarize_image <- function(opt, inter, n_main_dendrites, IMG, 
-                           elongated_dendrites, raster_size, process_full, method){
-  
+binarize_image <- function(opt, inter, n_main_dendrites, IMG,
+                           elongated_dendrites, raster_size, process_full, method, SOMA){
+  cat("\nmake binary image")
+  #t0 <- Sys.time()
   borders_vox_raw <- lapply(1:n_main_dendrites, get_vox_of_borders, 
                             main_dendrites=inter$main_dendrites,
                             nc_orig=opt$nc_orig,
                             nr_orig=opt$nr_orig,
-                            IMG=images$raw_image)
+                            IMG=IMG,
+                            SOMA=SOMA)
   
   selection_vector <- rep(c(1:n_main_dendrites), 3) %>% 
     set_names(c((-n_main_dendrites+1):(2*n_main_dendrites)))
-  
+  cat("\n  create raster image")
   dendrite_segments <- lapply(1:n_main_dendrites, create_raster, avs=raster_size,
                               borders_vox_raw=borders_vox_raw,
                               selection_vector=selection_vector, elongated_dendrites,
@@ -3902,7 +3858,8 @@ binarize_image <- function(opt, inter, n_main_dendrites, IMG,
                               process_full=process_full)
   
   sl <- Reduce(function(x,y)append(x,y),dendrite_segments)
-  
+  #t1 <- Sys.time()
+  cat("\n  binarize")
   if(method=="man"){
     binary_image <- bi2(sl, IMG)
   } else if(method=="otsu"){
@@ -3960,9 +3917,9 @@ otsu_own <- function(xi, range, levels){
     
     if(p0==0|p1==0){return(0)}
     u0 <- sapply(h$mids[which(h$mids<=t)], function(i){
-        (i*h$counts[which(h$mids==i)])/p0
-      }) %>% sum()
-     
+      (i*h$counts[which(h$mids==i)])/p0
+    }) %>% sum()
+    
     u1 <-  sapply(h$mids[which(h$mids>t)], function(i){
       (i*h$counts[which(h$mids==i)])/p1
     }) %>% sum()
@@ -4027,16 +3984,417 @@ extract_all_vectors <- function(MAIND){
   }) %>% return()
 }
 
-assign_vector_voxels <- function(AV){
-  #print(1)
-  AVF <-  lapply(AV, get_full_vector_voxels, IMG=images$bin_noS_noMD_image)
-  
+assign_vector_voxels <- function(AV, IMG, circle, RADv, RADh, nr_orig){
+  #print("a")
+  AVF <-  lapply(AV, get_full_vector_voxels, IMG=IMG)
+  #print("b")
   if(length(AVF)==0){return(NULL)}
-  get_all_vector_speheres(bind_rows(AVF), opt$trace_dend_cross_radius_vertical, 
-                          opt$trace_dend_cross_radius_horizontal, 
-                          opt$nr_orig, 
-                          images$bin_noS_noMD_image)
+  get_all_vector_speheres(bind_rows(AVF), 
+                          RADv, 
+                          RADh, 
+                          #inter$trace_dend_cross_circle,
+                          circle,
+                          nr_orig, 
+                          IMG)
 }
+
+
+
+get_surr_layer_doesntwork <- function(comb_main_dend, SOMA, nr_orig, IMG_screen, soma_radius, z_range, screen_subd_starts_circle){
+  # t0 <- Sys.time()
+  for(CT in 1:nrow(comb_main_dend)){
+    VP <- comb_main_dend[CT,]
+    sc <- get_circle_around_point(VP, screen_subd_starts_circle, nr_orig)
+    if(CT==1){
+      circ <- sc
+    } else {
+      circ <- c(circ, sc) %>% unique()
+    }
+  } 
+  
+  z_raw <- unique(comb_main_dend$z)
+  res_vec <- lapply((z_raw-z_range):(z_raw+z_range), function(Z){
+    
+    all_sorrounding_vox <- circ %>% 
+      lapply(function(IND){
+        raw <- cppGetXYIndex(IND, nr_orig)
+        
+        i <- cppSelectIntensity(raw[["x"]], raw[["y"]],Z, IMG_screen)
+        if(i==0){
+          return(NULL)
+        }
+        d <- cppDistPts(raw[["x"]], raw[["y"]],Z, SOMA[["x"]], SOMA[["y"]], SOMA[["z"]])
+        return(c(raw, z=Z, i=i, dist_to_soma=d))
+      }) %>% compact() %>%
+      bind_rows() %>%
+      .[which(.$dist_to_soma>3*soma_radius),] %>%
+      return()    
+  }) %>%
+    bind_rows()
+  
+}
+
+
+#r <- det_rad
+
+
+get_surr_layer_new <- function(comb_main_dend, SOMA, nr_orig, IMG_screen, soma_radius, z_range, r){
+  # t0 <- Sys.time()
+  for(CT in 1:nrow(comb_main_dend)){
+    VP <- comb_main_dend[CT,]
+    sc <- lapply(c(-r:r), function(X){
+      y=sqrt(r^2-X^2)
+      bottom <- round(VP[["y"]]-y)
+      top <- round(VP[["y"]]+y)
+      lapply(c(bottom:top), cppGetSingleIndex, x=X+round(VP[["x"]]), nr=nr_orig) %>%
+        return()
+    }) %>% 
+      c(recursive=T)
+    if(CT==1){
+      circ <- sc
+    } else {
+      circ <- c(circ, sc) %>% unique()
+    }
+  } 
+  
+  z_raw <- unique(comb_main_dend$z)
+  res_vec <- lapply((z_raw-z_range):(z_raw+z_range), function(Z){
+    
+    all_sorrounding_vox <- circ %>% 
+      lapply(function(IND){
+        raw <- cppGetXYIndex(IND, nr_orig)
+        
+        i <- cppSelectIntensity(raw[["x"]], raw[["y"]],Z, IMG_screen)
+        if(i==0){
+          return(NULL)
+        }
+        d <- cppDistPts(raw[["x"]], raw[["y"]],Z, SOMA[["x"]], SOMA[["y"]], SOMA[["z"]])
+        return(c(raw, z=Z, i=i, dist_to_soma=d))
+      }) %>% compact() %>%
+      bind_rows() %>%
+      .[which(.$dist_to_soma>3*soma_radius),] %>%
+      return()    
+  }) %>%
+    bind_rows()
+  
+}
+
+
+get_surr_layer <- function(comb_main_dend, SOMA, nr_orig, IMG_screen, soma_radius, z_range, det_rad){
+  
+  # t0 <- Sys.time()
+  
+  sequence <- seq(1, nrow(comb_main_dend), round(det_rad/3)) %>% c(.,nrow(comb_main_dend)) %>% unique()
+  
+  for(CT in sequence){
+    #print(CT)
+    VP <- comb_main_dend[CT,]
+    sc <-lapply((VP[["z"]]-z_range):(VP[["z"]]+z_range), function(Z){
+      r <- det_rad
+      circ <- lapply(c(-r:r), function(X){
+        y=sqrt(r^2-X^2)
+        bottom <- round(VP[["y"]]-y)
+        top <- round(VP[["y"]]+y)
+        lapply(c(bottom:top), get_single_index, x=X+round(VP[["x"]]), nr=nr_orig) %>%
+          return()
+      }) %>% 
+        c(recursive=T) %>%
+        paste(Z, ., sep="_") %>%
+        return()
+    }) %>% 
+      c(recursive=T)
+    if(CT==1){
+      res_vec <- sc
+    } else {
+      res_vec <- c(res_vec, sc) %>% unique()
+    }
+  }
+  
+  
+  all_sorrounding_vox <- res_vec %>% 
+    lapply(function(IND){
+      s <- str_split(IND, "_") 
+      z <- as.numeric(map_chr(s,1))
+      raw <- cppGetXYIndex(as.numeric(map_chr(s,2)), nr_orig)
+      i <- cppSelectIntensity(raw[["x"]], raw[["y"]],z, IMG_screen)
+      if(i==0){
+        return(NULL)
+      }
+      d <- cppDistPts(raw[["x"]], raw[["y"]],z, SOMA[["x"]], SOMA[["y"]], SOMA[["z"]])
+      return(c(raw, z=z, i=i, dist_to_soma=d))
+    }) %>% compact() %>%
+    bind_rows() %>%
+    .[which(.$dist_to_soma>3*soma_radius),] %>%
+    return()
+  
+  #print(Sys.time()-t0)
+  
+}
+
+
+
+
+
+
+
+
+
+remove_main_dendrites <- function(IMG, main_vectors, main_vectors_full, rem_rad, nr_orig, nc_orig){
+  
+  ## time improvement at its best... wont get faster
+  
+  comb_main_dend <- lapply(1:length(main_vectors), function(n){
+    full_vecs <- main_vectors_full[[n]]
+    full_dendrite <- bind_rows(full_vecs) %>%
+      mutate_all(.funs = as.numeric) %>%
+      mutate(ind=get_single_index(x,y,nr_orig)) 
+    
+    selector <- seq(1, nrow(full_dendrite), rem_rad/2) %>% c(.,nrow(full_dendrite)) %>% unique()
+    
+    return(full_dendrite[selector,])
+    
+  }) %>% bind_rows() #%>% as.matrix()
+  
+  cat("\nremoving main dendrites; about", nrow(comb_main_dend)*0.31, "s")
+  
+  rem_IMG <- lapply(1:length(IMG), function(n){
+    
+    all_vox <- apply(comb_main_dend, 1, function(VP){
+      r <- round(rem_rad+0.0175*(abs(round(VP[["z"]])-n))^2)
+      circ <- lapply(c(-r:r), function(X){
+        y=sqrt(r^2-X^2)
+        bottom <- round(VP[["y"]]-y)
+        top <- round(VP[["y"]]+y)
+        lapply(c(bottom:top), get_single_index, x=X+round(VP[["x"]]), nr=nr_orig) %>%
+          return()
+      }) %>% unlist()
+      
+    }) %>%
+      c(recursive=T) %>%
+      unique() 
+    
+    
+    
+    LAYER <- IMG[[n]]
+    LAYER[all_vox] <- 0
+    return(LAYER)
+  })
+  return(rem_IMG)
+  
+}
+
+
+
+
+
+main <- function(file, run_dir){
+  
+  rt0 <- Sys.time()
+  
+  tmp_dir <- file.path(run_dir, "tmp")
+  dir.create(tmp_dir)
+  
+  #images <- list(
+  raw_image=readTIFF(file, all=T)
+  #  )
+  # run_dir <- "f:/data_sholl_analysis/test/parabolar"
+  # load(file.path(run_dir, "images/images_new.RData"))
+  opt <- set_options(raw_image)
+  inter <- list()
+  ## find all somata in the image
+  somata <- get_somata(opt$soma_xy_detection_cube_radius*2+1, 
+                       opt$soma_z_detection_radius, 
+                       opt$soma_z_detection_degree_steps, 
+                       raw_image)
+  ## loop over somata ... now just do it for one
+  SOMA <- somata[1,] %>% mutate_all(.funs = round) 
+  cat(paste("\n ", nrow(somata), "somata detected"))
+  ## find start sites of main dendrites from soma
+  inter$main_dendrites_raw <- find_dendritic_start_sites(SOMA, raw_image)
+  
+  ### ab hier könnte raw image weg
+  
+  
+  inter$main_dendrites <- inter$main_dendrites_raw[[1]] %>% 
+    mutate(z=SOMA[["z"]])  %>%
+    arrange(h_angle) %>%
+    rownames_to_column("dendrite_id")
+  
+  
+  
+  inter$soma_radius <- inter$main_dendrites_raw[[2]]    
+  inter$n_main_dendrites <- nrow(inter$main_dendrites)
+  
+  cat(paste("\n ", inter$n_main_dendrites, "main dendrites detected\n  elongating main dendrites:"))
+  
+  ## elongate main dendrites
+  inter$elongated_dendrites <- apply(inter$main_dendrites, 1, elongate_dendrite,
+                                     SOMA=SOMA, IMG=raw_image)
+  
+  # export_dendrites(elongated_dendrites, "f:/data_sholl_analysis/test/dendrites/main_dend.tsv")
+  #  print(1)
+  inter$main_vectors_raw <- lapply(inter$elongated_dendrites, define_full_vector_info, 
+                                   IMG=raw_image, SOMA=SOMA)
+  # print(2)
+  inter$main_vectors <- lapply(inter$main_vectors_raw, nth, 1)
+  inter$main_vectors_full=lapply(inter$main_vectors_raw, nth, 2)
+  inter$main_vectors_df <- lapply(inter$main_vectors, bind_rows) 
+  
+  ## 34 sec
+  noS_image <- remove_soma(SOMA, inter$soma_radius, raw_image, opt$nr_orig, opt$nc_orig)
+  rt1 <- Sys.time()
+  rm(raw_image)
+  
+  
+  
+  
+  noS_noMD_image <- remove_main_dendrites(noS_image, 
+                                          inter$main_vectors, 
+                                          inter$main_vectors_full, 
+                                          opt$subd_max_detection_distance-opt$subd_detection_depth-1, 
+                                          opt$nr_orig, 
+                                          opt$nc_orig)
+  
+  
+  
+  
+  ## 2 mins until here
+  
+  #  rt2 <- Sys.time()
+  
+  #print(1)
+  
+  # rt3 <- Sys.time()
+  
+  ## remove noSOMA image
+  #images <- images[which(!names(images %in% c("noS_image")))]
+  
+  #print(2)
+  bin_noS_noMD_image <- binarize_image(opt, inter, 
+                                       inter$n_main_dendrites, 
+                                       noS_noMD_image, 
+                                       inter$elongated_dendrites, 80, T, "man", SOMA=SOMA)
+  #images <- images[which(!names(images %in% c("noS_noMD_image", "raw_image")))]
+  #rt4 <- Sys.time()
+  #print(3)
+  #run_dir <- "f:/data_sholl_analysis/test/runs"
+  #writeTIFF(images$noS_noMD_image, file.path(run_dir, "noS_noMD.tif"))
+  writeTIFF(bin_noS_noMD_image, file.path(tmp_dir, "bin_noS_noMD_image.tif"))
+  rm(noS_noMD_image)
+  #med_bin_noS_image_p <- apply_3d_median_filter(bin_noS_image_p, 2)
+  
+  inter$subd_max_detection_circle <- create_circle(opt$subd_max_detection_distance)
+  
+  # export all images
+  rt5 <- Sys.time() ## 4 mins until here
+  
+  med_bin_noS_noMD_image <- apply_3d_median_filter(bin_noS_noMD_image, 2)
+  
+  rm(bin_noS_noMD_image)
+  
+  bin_noS_image_p <- binarize_image(opt, inter, 
+                                    inter$n_main_dendrites, 
+                                    noS_image, 
+                                    #raw_image,
+                                    inter$elongated_dendrites,80, F, "man", SOMA=SOMA) 
+  
+  rm(noS_image)
+  
+  MASTER <- lapply(1:inter$n_main_dendrites, find_subdendritic_starts_new, 
+                   main_vectors=inter$main_vectors,
+                   main_vectors_df=inter$main_vectors_df,
+                   main_vectors_full=inter$main_vectors_full,
+                   SOMA=SOMA,
+                   IMG_screen=med_bin_noS_noMD_image,
+                   IMG_adj=bin_noS_image_p,
+                   soma_radius=inter$soma_radius,
+                   MPTS=opt$subd_cluster_mpt,
+                   EPS=opt$subd_cluster_eps,
+                   det_rad=opt$subd_max_detection_distance,
+                   z_range=opt$subd_detection_vertical_range,
+                   nr_orig=opt$nr_orig,
+                   screen_subd_starts_circle=inter$subd_max_detection_circle
+  )
+  print("Master created")
+  
+  rm(med_bin_noS_noMD_image)
+  rm(bin_noS_image_p)
+  
+  bin_noS_noMD_image <- readTIFF(file.path(tmp_dir, "bin_noS_noMD_image.tif"), all=T)
+  #images <- images[which(!names(images %in% c("med_bin_noS_noMD_image", "bin_noS_image_p")))]
+  rt6 <- Sys.time()
+  
+  #save(images, file=file.path(run_dir, "images/images_new.RData"))
+  
+  inter$all_vectors <- lapply(MASTER, extract_all_vectors) 
+  #print(1)
+  
+  inter$trace_dend_cross_circle <- create_circle(opt$trace_dend_cross_radius_horizontal) 
+  #print(2)
+  inter$trace_dend_detection_circle <- create_circle(opt$trace_detection_distance+opt$trace_detection_depth)  
+  
+  inter$all_points <- lapply(inter$all_vectors, assign_vector_voxels,  
+                             IMG=bin_noS_noMD_image, 
+                             circle=inter$trace_dend_cross_circle,
+                             RADv=opt$trace_dend_cross_radius_vertical,
+                             RADh=opt$trace_dend_cross_radius_horizontal,
+                             nr_orig=opt$nr_orig)
+  
+  
+  
+  #print(3)
+  
+
+  
+  print("prepared for tracing")
+  
+  
+  
+  
+  traced_MASTER <- lapply(1:inter$n_main_dendrites, function(n){
+    cat(paste("\nmain-dendrite:", n))
+    trace_subdendrites( 
+      IMG=bin_noS_noMD_image,
+      MAIND=MASTER[[n]],
+      MV=inter$main_vectors_df[[n]],
+      main_vectors_full=inter$main_vectors_full[[n]],
+      
+      all_vectors = inter$all_vectors[[n]],  
+      all_points =inter$all_points[[n]],
+      
+      EPS_orig=opt$trace_cluster_eps,
+      MPTS_orig=opt$trace_cluster_mpt,
+      INC=opt$trace_detection_depth,
+      
+      RADv=opt$trace_dend_cross_radius_vertical,
+      RADh=opt$trace_dend_cross_radius_horizontal,
+      cross_circle=inter$trace_dend_cross_circle,
+      
+      det_rad=opt$trace_detection_distance,
+      RESC_DIST=opt$trace_rescore_dist,
+      RESC_ANG=opt$trace_rescore_angle,
+      nr_orig=opt$nr_orig,
+      circle=inter$trace_dend_detection_circle,
+      
+      SOMA=SOMA)
+    
+    
+  })
+  rt7 <- Sys.time()                     
+  
+  export_structure(traced_MASTER, inter$main_vectors, SOMA,
+                   file.path(run_dir, "traced_dendrites.csv"))
+  
+  writeTIFF(bin_noS_noMD_image, file.path(run_dir, "main_binary.tif"))
+  
+}
+
+
+
+
+
+
+
 
 
 
