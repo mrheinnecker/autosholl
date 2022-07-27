@@ -3875,8 +3875,8 @@ remove_main_dendrites <- function(IMG, main_vectors, main_vectors_full, rem_rad,
 }
 
 main <- function(file, run_dir){
-  
-  rt0 <- Sys.time()
+  rt <- list()
+  rt[[1]] <- Sys.time()
   
   tmp_dir <- file.path(run_dir, "tmp")
   dir.create(tmp_dir)
@@ -3893,6 +3893,7 @@ main <- function(file, run_dir){
                        opt$soma_z_detection_radius, 
                        opt$soma_z_detection_degree_steps, 
                        raw_image)
+  rt[[2]] <- Sys.time()
   ## loop over somata ... now just do it for one
   SOMA <- somata[1,] %>% mutate_all(.funs = round) 
   cat(paste("\n ", nrow(somata), "somata detected"))
@@ -3904,7 +3905,7 @@ main <- function(file, run_dir){
   
   ### ab hier könnte raw image weg
   
-  
+  rt[[3]] <- Sys.time()
   inter$main_dendrites <- inter$main_dendrites_raw[[1]] %>% 
     mutate(z=SOMA[["z"]])  %>%
     arrange(h_angle) %>%
@@ -3920,7 +3921,7 @@ main <- function(file, run_dir){
   ## elongate main dendrites
   inter$elongated_dendrites <- apply(inter$main_dendrites, 1, elongate_dendrite,
                                      SOMA=SOMA, IMG=raw_image, nr=opt$nr_orig, nc=opt$nc_orig)
-  
+  rt[[4]] <- Sys.time()
   export_dendrites(inter$elongated_dendrites, file.path(run_dir, "elongated_dendrites.csv"), SOMA=SOMA)
   
   write_tsv(tibble(), file=file.path(run_dir, paste0("soma_z_", SOMA$z, ".tsv")))
@@ -3938,12 +3939,10 @@ main <- function(file, run_dir){
   #print(3)
   ## 34 sec
   noS_image <- remove_soma(SOMA, inter$soma_radius, raw_image, opt$nr_orig, opt$nc_orig)
-  rt1 <- Sys.time()
+  rt[[5]] <- Sys.time()
   writeTIFF(raw_image, file.path(run_dir, file %>% str_split("/") %>% unlist() %>% last()))
   rm(raw_image)
   #print(4)
-
-
 
   noS_noMD_image <- remove_main_dendrites(noS_image,
                                           inter$main_vectors,
@@ -3959,7 +3958,7 @@ main <- function(file, run_dir){
 
   ## 2 mins until here
 
-    rt2 <- Sys.time()
+  rt[[6]] <- Sys.time()
 
   #print(1)
 
@@ -3982,7 +3981,7 @@ main <- function(file, run_dir){
                                        inter$main_vectors_full)
   rm(noS_noMD_image)
   writeTIFF(bin_noS_noMD_image, file.path(run_dir, "bin_noS_noMD_image.tif"))
- rt3 <- Sys.time()
+  rt[[7]] <- Sys.time()
   
   #test <- lapply(bin_noS_noMD_image, as.matrix)
   
@@ -3998,7 +3997,7 @@ main <- function(file, run_dir){
   inter$subd_max_detection_circle <- create_circle(opt$subd_max_detection_distance)
 
   # export all images
-  rt5 <- Sys.time() ## 4 mins until here
+  ## 4 mins until here
 
   med_bin_noS_noMD_image <- apply_3d_median_filter(bin_noS_noMD_image, 2)
   writeTIFF(med_bin_noS_noMD_image, file.path(run_dir, "med_bin_noS_noMD_image.tif"))
@@ -4019,6 +4018,7 @@ main <- function(file, run_dir){
 
   rm(noS_image)
   #
+  rt[[8]] <- Sys.time() 
   MASTER <- lapply(1:inter$n_main_dendrites, find_subdendritic_starts_new,
                    main_vectors=inter$main_vectors,
                    main_vectors_df=inter$main_vectors_df,
@@ -4036,8 +4036,10 @@ main <- function(file, run_dir){
   )
   # print("Master created")
   #
+  rt[[9]] <- Sys.time()
   
-  
+  time <- tibble(step=paste(c(1:(length(rt)-1)),c(2:length(rt)), sep="-"), time=diff(unlist(rt)))
+  write_tsv(time, file=file.path(run_dir, "required_time_00.tsv"))
   #### test
   
   # test <- find_subdendritic_starts_new(1,
