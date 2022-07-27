@@ -9,8 +9,8 @@ Rcpp::sourceCpp(file="c:/Users/Marco/git_repos/autosholl/cpp_fncts.cpp")
 
 ## load input files
 files <- list.files("f:/data_sholl_analysis/single_soma", pattern = "*", full.names = T)
-#files <- files[3:length(files)]
-file <- files[1]
+#files <- files[2:length(files)]
+file <- files[2]
 #file <- "f:/data_sholl_analysis/single_soma/Tier6_5_2_apical_D.tif"
 main_dir <- "f:/data_sholl_analysis/run"
 #dir.create(main_dir)
