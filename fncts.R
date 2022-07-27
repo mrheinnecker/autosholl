@@ -3819,7 +3819,8 @@ get_surr_layer <- function(comb_main_dend, SOMA, nr_orig, IMG_screen, soma_radiu
 # rem_rad=opt$subd_max_detection_distance-opt$subd_detection_depth-1
 # nr_orig=opt$nr_orig
 # nc_orig=opt$nc_orig
-# 
+
+
 
 remove_main_dendrites <- function(IMG, main_vectors, main_vectors_full, rem_rad, nr_orig, nc_orig){
   
@@ -3852,19 +3853,12 @@ remove_main_dendrites <- function(IMG, main_vectors, main_vectors_full, rem_rad,
         lapply(c(bottom:top), get_single_index, x=X+round(VP[["x"]]), nr=nr_orig) %>%
           return()
       }) %>% unlist() %>%
-        .[which(.<(nc_orig*nr_orig)&.>0)]#%>%
-        #return()
-      
-      
-      # if(max(circ)>nc_orig*nr_orig){print(VP)
-      #   print(max(circ))}
+        .[which(.<(nc_orig*nr_orig)&.>0)]
       return(circ)
       
     }) %>%
       c(recursive=T) %>%
       unique() 
-    
-    
     
     LAYER <- IMG[[n]]
     LAYER[all_vox] <- 0
@@ -3873,8 +3867,8 @@ remove_main_dendrites <- function(IMG, main_vectors, main_vectors_full, rem_rad,
   return(rem_IMG)
   
 }
-
-main <- function(file, run_dir){
+#reduce_ram=F
+main <- function(file, run_dir, reduce_ram){
   rt <- list()
   rt[[1]] <- Sys.time()
   
@@ -3941,7 +3935,10 @@ main <- function(file, run_dir){
   noS_image <- remove_soma(SOMA, inter$soma_radius, raw_image, opt$nr_orig, opt$nc_orig)
   rt[[5]] <- Sys.time()
   writeTIFF(raw_image, file.path(run_dir, file %>% str_split("/") %>% unlist() %>% last()))
-  rm(raw_image)
+  if(reduce_ram==T){
+    rm(raw_image)
+  }
+  
   #print(4)
 
   noS_noMD_image <- remove_main_dendrites(noS_image,
@@ -3953,7 +3950,9 @@ main <- function(file, run_dir){
 
 
   writeTIFF(noS_image, file.path(tmp_dir, "noS_image.tif"))
-  rm(noS_image)
+  if(reduce_ram==T){
+    rm(noS_image)
+  }
   #writeTIFF(noS_noMD_image, file.path(tmp_dir, "noS_noMD_image.tif"))
 
   ## 2 mins until here
@@ -3979,7 +3978,10 @@ main <- function(file, run_dir){
                                        opt$nr_orig,
                                        opt$nc_orig,
                                        inter$main_vectors_full)
-  rm(noS_noMD_image)
+  if(reduce_ram==T){
+    rm(noS_noMD_image)
+  }
+  
   writeTIFF(bin_noS_noMD_image, file.path(run_dir, "bin_noS_noMD_image.tif"))
   rt[[7]] <- Sys.time()
   
@@ -4001,8 +4003,11 @@ main <- function(file, run_dir){
 
   med_bin_noS_noMD_image <- apply_3d_median_filter(bin_noS_noMD_image, 2)
   writeTIFF(med_bin_noS_noMD_image, file.path(run_dir, "med_bin_noS_noMD_image.tif"))
+  
+  if(reduce_ram==T){
+  
   rm(bin_noS_noMD_image)
-
+}
 
   noS_image <- readTIFF(file.path(tmp_dir, "noS_image.tif"), all=T)
   bin_noS_image_p <- binarize_image(inter$n_main_dendrites,
@@ -4016,7 +4021,10 @@ main <- function(file, run_dir){
                                     opt$nr_orig,
                                     opt$nc_orig)
 
-  rm(noS_image)
+  if(reduce_ram==T){
+    
+    rm(noS_image)
+  }
   #
   rt[[8]] <- Sys.time() 
   MASTER <- lapply(1:inter$n_main_dendrites, find_subdendritic_starts_new,
@@ -4062,13 +4070,15 @@ main <- function(file, run_dir){
   
   export_structure(MASTER, inter$main_vectors, SOMA,
                    file.path(run_dir, "subdendrite_starts.csv"))
-  
-  rm(med_bin_noS_noMD_image)
-  rm(bin_noS_image_p)
+  if(reduce_ram==T){
+    rm(med_bin_noS_noMD_image)
+    rm(bin_noS_image_p)    
+  }
+
 
   bin_noS_noMD_image <- readTIFF(file.path(run_dir, "bin_noS_noMD_image.tif"), all=T)
   #images <- images[which(!names(images %in% c("med_bin_noS_noMD_image", "bin_noS_image_p")))]
-  rt6 <- Sys.time()
+
 
   #save(images, file=file.path(run_dir, "images/images_new.RData"))
 
@@ -4126,7 +4136,6 @@ main <- function(file, run_dir){
 
 
   })
-  rt7 <- Sys.time()
 
   export_structure(traced_MASTER, inter$main_vectors, SOMA,
                    file.path(run_dir, "traced_dendrites.csv"))
